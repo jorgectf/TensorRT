@@ -9,10 +9,6 @@ on:
   schedule:
     - cron: '7 2 * * 3'
 
-env:
-  CUDA_VERSION: 11.8.0
-  OS_VERSION: 20.04
-
 jobs:
   analyze:
     name: Analyze
@@ -30,10 +26,14 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     container:
-      image: nvidia/cuda:${{CUDA_VERSION}}-cudnn8-devel-ubuntu${OS_VERSION}
+      image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
       env:
-        TRT_VERSION: 8.5.1.7
         DEBIAN_FRONTEND: noninteractive
+        CUDA_VERSION: 11.8.0
+        OS_VERSION: 20.04
+        TRT_VERSION: 8.5.1.7
+        TRT_OSSPATH: /__w/TensorRT/TensorRT
+        TRT_LIBPATH: /usr/lib/x86_64-linux-gnu
 
     steps:
     - name: Update CUDA signing key
@@ -104,10 +104,8 @@ jobs:
         rm ngccli_cat_linux.zip ngc-cli.md5 
         echo "no-apikey\nascii\n" | ngc-cli/ngc config set
 
-    - name: Environment
+    - name: Set PATH
       run: |-
-        export TRT_LIBPATH="/usr/lib/x86_64-linux-gnu"
-        export TRT_OSSPATH="/__w/TensorRT/TensorRT"
         export PATH="${PATH}:/usr/local/bin/ngc-cli"
         export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 
@@ -134,8 +132,8 @@ jobs:
       working-directory: /__w/TensorRT/TensorRT
       run: |-
         mkdir -p build && cd build
-        cmake .. -DTRT_LIB_DIR="/usr/lib/x86_64-linux-gnu" -DTRT_OUT_DIR=`pwd`/out
-        make -j$(nproc)
+        cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
+        make -j $(nproc)
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
