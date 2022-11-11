@@ -45,6 +45,11 @@ jobs:
         add-apt-repository ppa:ubuntu-toolchain-r/test
         apt-get update && apt-get install -y --no-install-recommends libcurl4-openssl-dev wget git pkg-config sudo ssh libssl-dev pbzip2 pv bzip2 unzip devscripts lintian fakeroot dh-make build-essential
 
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+
     - name: Install python3
       run: |-
         apt-get install -y --no-install-recommends python3 python3-pip python3-dev python3-wheel
@@ -57,28 +62,27 @@ jobs:
 
     - name: Install TensorRT
       run: |-
-        if [ "${CUDA_VERSION}" = "10.2" ] ; then \
-            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}" &&\
-            apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
-            apt-get update &&\
-            sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
-                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-                python3-libnvinfer=${v}; \
-        else \
-            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}" &&\
-            apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
-            apt-get update &&\
-            sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
-                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-                python3-libnvinfer=${v}; \
+        if [ "${CUDA_VERSION}" = "10.2" ] ; then
+            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}"
+            apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
+            apt-get update
+            sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v}
+                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v}
+                python3-libnvinfer=${v}
+        else
+            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}"
+            apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
+            apt-get update
+            sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v}
+                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v}
+                python3-libnvinfer=${v}
         fi
 
     - name: Install PyPI packages
       run: |-
         pip3 install --upgrade pip
         pip3 install setuptools>=41.0.0
-        requirements.txt /tmp/requirements.txt
-        pip3 install -r /tmp/requirements.txt
+        pip3 install -r requirements.txt
         pip3 install jupyter jupyterlab
         # Workaround to remove numpy installed with tensorflow
         pip3 install --upgrade numpy
@@ -113,11 +117,6 @@ jobs:
         wget https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
         tar -xzf ./codeql-bundle-linux64.tar.gz
         rm codeql-bundle-linux64.tar.gz
-
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      with:
-        submodules: 'recursive'
         
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
