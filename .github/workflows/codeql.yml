@@ -30,7 +30,7 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     container:
-      image: nvidia/cuda:${{env.CUDA_VERSION}}-cudnn8-devel-ubuntu${OS_VERSION}
+      image: nvidia/cuda:${{CUDA_VERSION}}-cudnn8-devel-ubuntu${OS_VERSION}
       env:
         TRT_VERSION: 8.5.1.7
         DEBIAN_FRONTEND: noninteractive
