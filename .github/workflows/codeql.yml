@@ -107,7 +107,7 @@ jobs:
     - name: Environment
       run: |-
         export TRT_LIBPATH="/usr/lib/x86_64-linux-gnu"
-        export TRT_OSSPATH=`pwd`
+        export TRT_OSSPATH="/__w/TensorRT/TensorRT"
         export PATH="${PATH}:/usr/local/bin/ngc-cli"
         export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 
@@ -131,9 +131,10 @@ jobs:
         queries: +security-and-quality
 
     - name: Build
+      working-directory: /__w/TensorRT/TensorRT
       run: |-
         mkdir -p build && cd build
-        cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
+        cmake .. -DTRT_LIB_DIR="/usr/lib/x86_64-linux-gnu" -DTRT_OUT_DIR=`pwd`/out
         make -j$(nproc)
 
     - name: Perform CodeQL Analysis
