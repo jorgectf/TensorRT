@@ -90,7 +90,7 @@ jobs:
     - name: Install Cmake
       working-directory: /tmp
       run: |-
-        wget https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh
+        wget -q https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh
         chmod +x cmake-3.14.4-Linux-x86_64.sh
         ./cmake-3.14.4-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license
         rm ./cmake-3.14.4-Linux-x86_64.sh
@@ -98,7 +98,7 @@ jobs:
     - name: Download NGC client
       working-directory: /usr/local/bin
       run: |-
-        wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip
+        wget -q https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip
         unzip ngccli_cat_linux.zip
         chmod u+x ngc-cli/ngc
         rm ngccli_cat_linux.zip ngc-cli.md5 
@@ -107,14 +107,14 @@ jobs:
     - name: Environment
       run: |-
         export TRT_LIBPATH="/usr/lib/x86_64-linux-gnu"
-        export TRT_OSSPATH="/workspace/TensorRT"
+        export TRT_OSSPATH="/__w/TensorRT/TensorRT"
         export PATH="${PATH}:/usr/local/bin/ngc-cli"
         export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 
     - name: Install CodeQL
       working-directory: /usr/local/bin
       run: |-
-        wget https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
+        wget -q https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
         tar -xzf ./codeql-bundle-linux64.tar.gz
         rm codeql-bundle-linux64.tar.gz
         
@@ -131,7 +131,7 @@ jobs:
         queries: +security-and-quality
 
     - name: Build
-      working-directory: /workspace/TensorRT
+      working-directory: /__w/TensorRT/TensorRT
       run: |-
         mkdir -p build && cd build
         cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
