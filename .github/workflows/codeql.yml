@@ -103,18 +103,18 @@ jobs:
         chmod u+x ngc-cli/ngc
         rm ngccli_cat_linux.zip ngc-cli.md5 
         echo "no-apikey\nascii\n" | ngc-cli/ngc config set
-
-    - name: Set PATH
-      run: |-
         export PATH="${PATH}:/usr/local/bin/ngc-cli"
+
+    - name: Set LD_LIBRARY_PATH
+      run: |-
         export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 
     - name: Install CodeQL
-      working-directory: /usr/local/bin
+      working-directory: /__w/TensorRT
       run: |-
         wget -q https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
-        tar -xzf ./codeql-bundle-linux64.tar.gz
-        rm codeql-bundle-linux64.tar.gz
+        tar -xzf ./codeql-bundle-linux64.tar.gz && rm codeql-bundle-linux64.tar.gz
+        export PATH="${PATH}:/__w/TensorRT/codeql"
         
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
