@@ -28,7 +28,7 @@ jobs:
     container:
       image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
       volumes:
-        - ${{ runner.tool_cache }}:/__w/tools
+        - /opt/hostedtoolcache:/__w/tools
       env:
         DEBIAN_FRONTEND: noninteractive
         CUDA_VERSION: 11.8.0
