@@ -27,8 +27,6 @@ jobs:
 
     container:
       image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
-      volumes:
-        - /opt/hostedtoolcache:/__w/tools
       env:
         DEBIAN_FRONTEND: noninteractive
         CUDA_VERSION: 11.8.0
@@ -38,9 +36,6 @@ jobs:
         TRT_LIBPATH: /usr/lib/x86_64-linux-gnu
 
     steps:
-    - name: Add tools to PATH
-      run: export PATH="${PATH}:/__w/tools"
-
     # DEBUG: Finds codeql?
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
