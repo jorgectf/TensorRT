@@ -128,6 +128,32 @@ jobs:
         cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out
         make -j $(nproc)
 
+    # Free space
+    - name: Uninstall TensorRT
+      run: |
+        if [ "${CUDA_VERSION}" = "10.2" ] ; then \
+            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}" &&\
+            sudo apt-get remove libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
+                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
+                python3-libnvinfer=${v}; \
+        else \
+            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}" &&\
+            sudo apt-get remove libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
+                libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
+                python3-libnvinfer=${v}; \
+        fi
+
+    - name: Uninstall PyPI packages
+      run: |-
+        pip3 uninstall --upgrade pip
+        pip3 uninstall setuptools>=41.0.0
+        pip3 uninstall -r requirements.txt
+        pip3 uninstall jupyter jupyterlab
+        pip3 uninstall --upgrade numpy
+
+    - name: Remove NGC client
+      run: rm -rf /usr/local/bin/ngc-cli"
+
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
       with:
