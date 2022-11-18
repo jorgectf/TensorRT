@@ -145,9 +145,9 @@ jobs:
 
     - name: Uninstall PyPI packages
       run: |-
-        pip3 uninstall -r requirements.txt
-        pip3 uninstall jupyter jupyterlab
-        pip3 uninstall numpy
+        pip3 uninstall -y -r requirements.txt
+        pip3 uninstall -y jupyter jupyterlab
+        pip3 uninstall -y numpy
 
     - name: Remove NGC client
       run: rm -rf /usr/local/bin/ngc-cli"
