@@ -150,7 +150,7 @@ jobs:
         pip3 uninstall -y numpy
 
     - name: Remove NGC client
-      run: rm -rf /usr/local/bin/ngc-cli"
+      run: rm -rf /usr/local/bin/ngc-cli
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
