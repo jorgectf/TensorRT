@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import os
+
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
@@ -155,7 +157,9 @@ def np_type_from_str(dt_str):
 
 
 @mod.export()
-def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
+def parse_arglist_to_tuple_list(
+    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
     """
     Generate a list of (key, value) pairs from a list of arguments of the form:
     ``<key><sep><val>``.
@@ -185,16 +189,23 @@ def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_k
                 Defaults to True.
         treat_missing_sep_as_val (bool):
                 Whether the argument should be treated as a value with empty key
-                when separator is missing (see above).  Defaults to True.
+                when separator is missing (see above).
+                Defaults to True.
+        treat_unspecified_as_none (bool):
+                Whether to treat unspecified keys and values as `None`s instead of
+                empty strings.
+                Defaults to False.
+
     Returns:
         Optional[List[Tuple[str, obj]]]:
-            The parsed list, or None if arg_lst is None (indicating the flag
-            was not specified).
+                The parsed list, or None if arg_lst is None (indicating the flag
+                was not specified).
     """
     sep = util.default(sep, ":")
     cast_to = util.default(cast_to, cast)
     allow_empty_key = util.default(allow_empty_key, True)
     treat_missing_sep_as_val = util.default(treat_missing_sep_as_val, True)
+    treat_unspecified_as_none = util.default(treat_unspecified_as_none, False)
 
     if arg_lst is None:
         return None
@@ -203,66 +214,100 @@ def parse_tuple_list_with_default(arg_lst, cast_to=None, sep=None, allow_empty_k
     for arg in arg_lst:
         key, parsed_sep, val = arg.rpartition(sep)
 
-        if parsed_sep == '' and not treat_missing_sep_as_val:
+        if parsed_sep == "" and not treat_missing_sep_as_val:
             key, val = val, key
 
         if not key and not allow_empty_key:
             G_LOGGER.critical(
                 f"Could not parse argument: {arg}. Expected an argument in the format: `key{sep}value`.\n"
             )
-        ret.append((key, cast_to(val)))
+
+        val = cast_to(val)
+
+        if treat_unspecified_as_none:
+            key = key or None
+            val = val or None
+
+        ret.append((key, val))
+
     return ret
 
+
 @mod.export()
-def parse_dict_with_default(arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None):
+def parse_arg_to_tuple(
+    arg, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
     """
-    Generate a dict from a list of arguments of the form:
-    ``<key><sep><val>``.
-
-    If the argument is missing a separator,
-
-    - If `treat_missing_sep_as_val` is True, then the argument is treated as a
-      value with empty key, i.e. it is parsed as ``<sep><val>``.
-    - If `treat_missing_sep_as_val` is False, then the argument is treated as a
-      key with empty value, i.e. it is parsed as ``<key><sep>``.
-
-    If `allow_empty_key` is False, then this function will log a critical error if
-    any empty keys are detected.
+    Similar to `parse_arglist_to_tuple_list` but operates on a single argument and returns a single tuple
+    instead of a list of tuples.
 
     Args:
-        arg_lst (List[str]):
-                The arguments to map.
+        arg (str): The argument.
 
-        cast_to (Callable):
-                A callable to cast types before adding them to the map.
-                Defaults to `cast()`.
-        sep (str):
-                The separator between the key and value strings.
-                Defaults to ":".
-        allow_empty_key (bool):
-                Whether empty keys should be allowed.
-                Defaults to True.
-        treat_missing_sep_as_val (bool):
-                Whether the argument should be treated as a value with empty key
-                when separator is missing (see above).  Defaults to True.
+    Returns:
+        Optional[Tuple[str, obj]]:
+                The parser key-value pair, or None if `arg` is None (indicating the flag
+                was not specified).
+    """
+    if arg is None:
+        return None
+
+    tuple_list = parse_arglist_to_tuple_list(
+        [arg], cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+    )
+    if tuple_list is None:
+        return None
+
+    if len(tuple_list) != 1:
+        G_LOGGER.critical(
+            f"Failed to parse argument: {arg}. Expected an argument of the form: "
+            f"`key{sep}value`{f' or `value`' if allow_empty_key else ''}."
+        )
+    return tuple_list[0]
+
+
+@mod.export()
+def parse_arglist_to_dict(
+    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+):
+    """
+    Similar to `parse_arglist_to_tuple_list` but returns a dictionary instead of a list of tuples.
+
     Returns:
         Optional[Dict[str, obj]]:
-            The parsed key-value map, or None if arg_lst is None (indicating the flag
-            was not specified).
+                The parsed key-value map, or None if arg_lst is None (indicating the flag
+                was not specified).
     """
-    tuple_list = parse_tuple_list_with_default(arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val)
+    tuple_list = parse_arglist_to_tuple_list(
+        arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+    )
     if tuple_list is None:
         return None
     return dict(tuple_list)
 
-@mod.deprecate(
-    remove_in="0.45.0",
-    use_instead=": as a separator and write shapes in the form [dim0,...,dimN]",
-    name="Using , as a separator",
-)
-def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
+
+@mod.export()
+def parse_script_and_func_name(arg, default_func_name=None):
+    if arg is None:
+        return None, None
+
+    # On Windows we need to split the drive letter (e.g. 'C:') so it's not confused with the script/function separator.
+    drive_letter, arg = os.path.splitdrive(arg)
+    script_and_func_name = parse_arg_to_tuple(arg, treat_missing_sep_as_val=False, treat_unspecified_as_none=True)
+    if script_and_func_name is not None:
+        script, func_name = script_and_func_name
+        func_name = util.default(func_name, default_func_name)
+    else:
+        script, func_name = None, None
+
+    script = drive_letter + script
+    return script, func_name
+
+
+@mod.export()
+def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
     """
-    Parses a list of tensor metadata arguments of the form "<name>,<shape>,<dtype>"
+    Parses a list of tensor metadata arguments of the form "<name>:<shape>:<dtype>"
     `shape` and `dtype` are optional, but `dtype` must always come after `shape` if they are both enabled.
 
     Args:
@@ -273,97 +318,6 @@ def parse_meta_legacy(meta_args, includes_shape=True, includes_dtype=True):
     Returns:
         TensorMetadata: The parsed tensor metadata.
     """
-    SEP = ","
-    SHAPE_SEP = "x"
-    meta = TensorMetadata()
-    for orig_tensor_meta_arg in meta_args:
-        tensor_meta_arg = orig_tensor_meta_arg
-
-        def pop_meta(name):
-            nonlocal tensor_meta_arg
-            tensor_meta_arg, _, val = tensor_meta_arg.rpartition(SEP)
-            if not tensor_meta_arg:
-                G_LOGGER.critical(
-                    f"Could not parse {name} from argument: {orig_tensor_meta_arg}. Is it separated by a comma (,) from the tensor name?"
-                )
-            if val.lower() == "auto":
-                val = None
-            return val
-
-        def parse_dtype(dtype):
-            if dtype is not None:
-                dtype = np_type_from_str(dtype)
-            return dtype
-
-        def parse_shape(shape):
-            if shape is not None:
-
-                def parse_shape_dim(buf):
-                    try:
-                        buf = int(buf)
-                    except:
-                        pass
-                    return buf
-
-                parsed_shape = []
-                # Allow for quoted strings in shape dimensions
-                in_quotes = False
-                buf = ""
-                for char in shape.lower():
-                    if char in ['"', "'"]:
-                        in_quotes = not in_quotes
-                    elif not in_quotes and char == SHAPE_SEP:
-                        parsed_shape.append(parse_shape_dim(buf))
-                        buf = ""
-                    else:
-                        buf += char
-                # For the last dimension
-                if buf:
-                    parsed_shape.append(parse_shape_dim(buf))
-                shape = tuple(parsed_shape)
-            return shape
-
-        name = None
-        dtype = None
-        shape = None
-
-        if includes_dtype:
-            dtype = parse_dtype(pop_meta("data type"))
-
-        if includes_shape:
-            shape = parse_shape(pop_meta("shape"))
-
-        name = tensor_meta_arg
-        meta.add(name, dtype, shape)
-
-    new_style = []
-    for m_arg in meta_args:
-        arg = m_arg
-        if includes_shape:
-            arg = arg.replace(",", ":[", 1)
-            if includes_dtype:
-                arg = arg.replace(",", "]:", 1)
-            else:
-                arg += "]"
-
-        arg = arg.replace(",auto", ":auto")
-        arg = arg.replace(",", ":")
-
-        if includes_shape:
-            arg = arg.replace("x", ",")
-
-        new_style.append(arg)
-
-    G_LOGGER.warning(
-        "The old shape syntax is deprecated and will be removed in Polygraphy 0.45.0\n"
-        "See the CHANGELOG entry for v0.32.0 for the motivation behind this deprecation.",
-        mode=LogMode.ONCE,
-    )
-    G_LOGGER.warning(f"Instead of: '{' '.join(meta_args)}', use: '{' '.join(new_style)}'\n")
-    return meta
-
-
-def parse_meta_new_impl(meta_args, includes_shape=True, includes_dtype=True):
     SEP = ":"
     meta = TensorMetadata()
     for meta_arg in meta_args:
@@ -387,25 +341,6 @@ def parse_meta_new_impl(meta_args, includes_shape=True, includes_dtype=True):
 
         meta.add(name, dtype=dtype, shape=shape)
     return meta
-
-
-@mod.export()
-def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
-    """
-    Parses a list of tensor metadata arguments of the form "<name>:<shape>:<dtype>"
-    `shape` and `dtype` are optional, but `dtype` must always come after `shape` if they are both enabled.
-
-    Args:
-        meta_args (List[str]): A list of tensor metadata arguments from the command-line.
-        includes_shape (bool): Whether the arguments include shape information.
-        includes_dtype (bool): Whether the arguments include dtype information.
-
-    Returns:
-        TensorMetadata: The parsed tensor metadata.
-    """
-    if all((includes_shape and "[" in arg) or (includes_dtype and "," not in arg) for arg in meta_args):
-        return parse_meta_new_impl(meta_args, includes_shape, includes_dtype)
-    return parse_meta_legacy(meta_args, includes_shape, includes_dtype)
 
 
 @mod.export()

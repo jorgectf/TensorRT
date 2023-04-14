@@ -48,26 +48,21 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
             action="store_true",
             default=False,
         )
+        network_group.add_argument(
+            "--num-beams", type=int, default=1, help="Enables beam search during decoding."
+        )
+
+        network_group.add_argument(
+            "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
+        )
 
     @staticmethod
     def from_args(args: argparse.Namespace):
         return NetworkMetadata(
             variant=args.variant,
-            precision=Precision(fp16=False),
+            precision=Precision(fp16=args.fp16),
             other=GPT2Metadata(kv_cache=args.enable_kv_cache),
         )
-
-    @staticmethod
-    def add_inference_args(parser: argparse.ArgumentParser) -> None:
-        inference_group = parser.add_argument_group("inference group")
-        inference_group.add_argument(
-            "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
-        )
-
-    @staticmethod
-    def from_inference_args(args: argparse.Namespace):
-        base_metadata = GPT2Metadata.from_args(args)
-        return base_metadata._replace(precision=Precision(fp16=args.fp16))
 
     @staticmethod
     def add_benchmarking_args(parser: argparse.ArgumentParser) -> None:
@@ -75,35 +70,54 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
         benchmarking_group.add_argument(
             "--input-seq-len",
             type=int,
-            default=1,
-            help="Specify fixed input sequence length for perf benchmarking. (default: 1)",
+            help="Specify fixed input sequence length for perf benchmarking.",
         )
         benchmarking_group.add_argument(
             "--output-seq-len",
             type=int,
-            default=64,
-            help="Specify fixed output sequence length for perf benchmarking. (default: 64)",
+            help="Specify fixed output sequence length for perf benchmarking.",
         )
 
 
 GPT2BenchmarkingArgs = namedtuple("GPT2BenchmarkingArgs", ["input_seq_len", "output_seq_len"])
+GPT2TRTBenchmarkingArgs = namedtuple("GPT2BenchmarkingArgs", ["input_seq_len", "output_seq_len", "input_profile_max_len", "output_profile_max_len"])
 
 
 class GPT2ModelTRTConfig(NNConfig):
-    VOCAB_SIZE = 50257  # Vocabulary size of the GPT-2 model
-    TARGET_MODELS = ["gpt2", "gpt2-large"]
+    TARGET_MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "EleutherAI/gpt-j-6B"]
     NETWORK_DECODER_SEGMENT_NAME = "gpt2_decoder"
     NETWORK_SEGMENTS = [NETWORK_DECODER_SEGMENT_NAME]
     NETWORK_FULL_NAME = "full"
 
-    MAX_SEQUENCE_LENGTH = {
-        TARGET_MODELS[0]: 64,
-        TARGET_MODELS[1]: 64,
+    NUMBER_OF_LAYERS = {
+        TARGET_MODELS[0]: 12,
+        TARGET_MODELS[1]: 24,
+        TARGET_MODELS[2]: 36,
+        TARGET_MODELS[3]: 48,
+        TARGET_MODELS[4]: 28,
+    }
+
+    # This corresponds to max_length in task_specific_params for text-generation.
+    # Both input and output length should not exceed 50.
+    MAX_LENGTH = {
+        TARGET_MODELS[0]: 50,
+        TARGET_MODELS[1]: 50,
+        TARGET_MODELS[2]: 50,
+        TARGET_MODELS[3]: 50,
+        TARGET_MODELS[4]: 50,
+    }
+
+    MIN_OUTPUT_LENGTH = {
+        TARGET_MODELS[0]: 0,
+        TARGET_MODELS[1]: 0,
+        TARGET_MODELS[2]: 0,
+        TARGET_MODELS[3]: 0,
+        TARGET_MODELS[4]: 0,
     }
 
     def __init__(self):
         precision_fp16 = [False, True]
-        kv_caches = [False]
+        kv_caches = [False, True]
         variants = []
         for variant, fp16, kv_cache in product(
             GPT2ModelTRTConfig.TARGET_MODELS, precision_fp16, kv_caches
@@ -120,8 +134,15 @@ class GPT2ModelTRTConfig(NNConfig):
 
     def get_python_requirements(self):
         base_requirements = super().get_python_requirements()
-        base_requirements.append("transformers==4.6.1")
+        base_requirements.append('transformers==4.20.0; python_version>="3.7"')
+        base_requirements.append('transformers==4.18.0; python_version<"3.7"')
         return base_requirements
+
+    def get_metadata_string(self, metadata: NetworkMetadata) -> str:
+        # Remove redundant GPT2 name
+        metadata = metadata._replace(variant=metadata.variant.lstrip("GPT2-"))
+        metadata = metadata._replace(variant=metadata.variant.lstrip("EleutherAI/"))
+        return super().get_metadata_string(metadata)
 
     @staticmethod
     def get_input_dims(metadata) -> Dict:
@@ -130,10 +151,19 @@ class GPT2ModelTRTConfig(NNConfig):
         Returns:
             (Dict[str, Dims]): {"decoder": Dims}
         """
+        decoder_inputs_dict = OrderedDict({"input_ids": (Dims.BATCH, Dims.SEQUENCE)})
+        if metadata.other.kv_cache:
+            # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V)
+            for i in range(GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]):
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep)
+                self_attention_past_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("past_decoder_length"), "embedding_size_per_head")
+                decoder_inputs_dict[f"past_key_values.{i}.decoder.key"] = self_attention_past_kv_dims
+                decoder_inputs_dict[f"past_key_values.{i}.decoder.value"] = self_attention_past_kv_dims
+
+        decoder_inputs = Dims(decoder_inputs_dict)
+
         return {
-            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME: Dims(
-                OrderedDict({"input_ids": (Dims.BATCH, Dims.SEQUENCE)})
-            ),
+            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME: decoder_inputs
         }
 
     @staticmethod
@@ -144,16 +174,25 @@ class GPT2ModelTRTConfig(NNConfig):
         Returns:
             (Dict[str, Dims]): {"decoder": Dims, "encoder": Dims}
         """
-        return {
-            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME: Dims(
-                OrderedDict(
-                    {
-                        "logits": (
-                            Dims.BATCH,
-                            Dims.SEQUENCE,
-                            GPT2ModelTRTConfig.VOCAB_SIZE,
-                        )
-                    }
+        decoder_outputs_dict = OrderedDict(
+            {
+                "logits": (
+                    Dims.BATCH,
+                    Dims.SEQUENCE,
+                    "vocab_size"
                 )
-            ),
+            }
+        )
+        if metadata.other.kv_cache:
+            # for KV cache version, we need add per-layer KV cache inputs. `past_key_values` at each layer is (self-attention K, self-attention V)
+            for i in range(GPT2ModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant]):
+                # decoder self-attention KV cache (dim[0] & dim[2] are dynamic, and dim[2] varies at each decoding timestep)
+                self_attention_present_kv_dims = (Dims.BATCH, "num_heads", Dims.create_new_sequence_dim("decoder_length"), "embedding_size_per_head")
+                decoder_outputs_dict[f"present_key_values.{i}.decoder.key"] = self_attention_present_kv_dims
+                decoder_outputs_dict[f"present_key_values.{i}.decoder.value"] = self_attention_present_kv_dims
+
+        decoder_outputs = Dims(decoder_outputs_dict)
+
+        return {
+            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME: decoder_outputs
         }

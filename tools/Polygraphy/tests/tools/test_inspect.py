@@ -21,8 +21,15 @@ from textwrap import dedent
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
-from polygraphy.backend.trt import CreateConfig, Profile, engine_from_network, network_from_onnx_bytes, save_engine
+from polygraphy import mod, util, constants
+from polygraphy.backend.trt import (
+    CreateConfig,
+    Profile,
+    engine_from_network,
+    network_from_onnx_bytes,
+    save_engine,
+    util as trt_util,
+)
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
 
@@ -60,7 +67,11 @@ def check_lines_match(actual, expected, should_check_line=lambda x: True):
     print(f"Actual output:\n{actual}")
     print(f"Expected output:\n{expected}")
 
-    actual = [line for line in actual.splitlines() if "Loading" not in line and "[V]" not in line]
+    actual = [
+        line
+        for line in actual.splitlines()
+        if "Loading" not in line and not line.startswith("[V]") and not line.startswith("[W]")
+    ]
     expected = expected.splitlines()
     assert len(actual) == len(expected)
 
@@ -416,11 +427,19 @@ ONNX_CASES = [
     ],
 ]
 
+
+def process_expected_engine_output(output):
+    # This used to be required due to differences in the output based on TRT version, but is not required currently.
+    # Kept here as it may be required in the future.
+    return output
+
+
 # Format: List[Tuple[show_opts, expected]]
 ENGINE_CASES = [
     (
         [],
-        r"""
+        process_expected_engine_output(
+            r"""
         [I] ==== TensorRT Engine ====
             Name: Unnamed Network 0 | Explicit Batch Engine
 
@@ -433,7 +452,7 @@ ENGINE_CASES = [
             ---- Memory ----
             Device Memory: 0 bytes
 
-            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
             - Profile: 0
                 Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
                 Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
@@ -443,11 +462,38 @@ ENGINE_CASES = [
                 Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
 
             ---- 1 Layer(s) Per Profile ----
-        """,
+        """
+            if not trt_util._should_use_v3_api()
+            else r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
+            - Profile: 0
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+        """
+        ),
     ),
     (
         ["layers"],
-        r"""
+        process_expected_engine_output(
+            r"""
         [I] ==== TensorRT Engine ====
             Name: Unnamed Network 0 | Explicit Batch Engine
 
@@ -460,7 +506,7 @@ ENGINE_CASES = [
             ---- Memory ----
             Device Memory: 0 bytes
 
-            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
             - Profile: 0
                 Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
                 Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
@@ -479,11 +525,47 @@ ENGINE_CASES = [
                 Layer 0    | node_of_Y [profile 1] [Op: Reformat]
                     {X [profile 1] [shape=(1, 2, -1, -1)]}
                      -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
-        """,
+        """
+            if not trt_util._should_use_v3_api()
+            else r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
+            - Profile: 0
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+            - Profile: 0
+                Layer 0    | node_of_Y [Op: Reformat]
+                    {X [shape=(1, 2, -1, -1)]}
+                     -> {Y [shape=(1, 2, -1, -1)]}
+
+            - Profile: 1
+                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
+                    {X [profile 1] [shape=(1, 2, -1, -1)]}
+                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
+        """
+        ),
     ),
     (
         ["layers", "attrs"],
-        r"""
+        process_expected_engine_output(
+            r"""
         [I] ==== TensorRT Engine ====
             Name: Unnamed Network 0 | Explicit Batch Engine
 
@@ -496,7 +578,7 @@ ENGINE_CASES = [
             ---- Memory ----
             Device Memory: 0 bytes
 
-            ---- 2 Profile(s) (2 Binding(s) Each) ----
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
             - Profile: 0
                 Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
                 Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
@@ -511,7 +593,7 @@ ENGINE_CASES = [
                     {X [shape=(1, 2, -1, -1)]}
                      -> {Y [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
 
             - Profile: 1
@@ -519,9 +601,50 @@ ENGINE_CASES = [
                     {X [profile 1] [shape=(1, 2, -1, -1)]}
                      -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
                     ---- Attributes ----
-                    Origin = IDENTITY
+                    Origin = CAST
                     Tactic = 0x0
-        """,
+        """
+            if not trt_util._should_use_v3_api()
+            else r"""
+        [I] ==== TensorRT Engine ====
+            Name: Unnamed Network 0 | Explicit Batch Engine
+
+            ---- 1 Engine Input(s) ----
+            {X [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- 1 Engine Output(s) ----
+            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
+
+            ---- Memory ----
+            Device Memory: 0 bytes
+
+            ---- 2 Profile(s) (2 Tensor(s) Each) ----
+            - Profile: 0
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            - Profile: 1
+                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
+                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
+
+            ---- 1 Layer(s) Per Profile ----
+            - Profile: 0
+                Layer 0    | node_of_Y [Op: Reformat]
+                    {X [shape=(1, 2, -1, -1)]}
+                     -> {Y [shape=(1, 2, -1, -1)]}
+                    ---- Attributes ----
+                    Origin = CAST
+                    Tactic = 0x0
+
+            - Profile: 1
+                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
+                    {X [profile 1] [shape=(1, 2, -1, -1)]}
+                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
+                    ---- Attributes ----
+                    Origin = CAST
+                    Tactic = 0x0
+        """
+        ),
     ),
 ]
 
@@ -583,7 +706,7 @@ class TestInspectModel:
         check_lines_match(
             actual,
             expected,
-            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline,
+            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline and "Origin" not in exline,
         )
 
     def test_tf_sanity(self, run_inspect_model):
@@ -604,6 +727,36 @@ class TestInspectData:
         with util.NamedTemporaryFile() as outpath:
             poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
             poly_inspect(["data", outpath.name] + opts)
+
+    @pytest.mark.parametrize("num_items", [-1, 1, 2, 10, 12])
+    def test_num_items(self, poly_run, poly_inspect, num_items):
+        with util.NamedTemporaryFile() as outpath:
+            poly_run(
+                [
+                    ONNX_MODELS["dynamic_identity"].path,
+                    "--onnxrt",
+                    "--save-inputs",
+                    outpath.name,
+                    "--input-shapes=X:[1,2,24,24]",
+                ]
+            )
+            status = poly_inspect(
+                ["data", outpath.name, "--show-values", "--line-width=-1", f"--num-items={num_items}"]
+            )
+
+            # Process only lines containing array print outs (which are all indented)
+            lines = [
+                line.strip()
+                for line in status.stdout.splitlines()
+                if line.strip() and line.startswith(constants.TAB * 2) and line.strip() != "..."
+            ]
+            for line in lines:
+                items = [e for e in line.strip("[]").split() if "..." not in e]
+
+                if num_items == -1:
+                    assert len(items) == 24
+                else:
+                    assert len(items) == num_items * 2
 
 
 TACTIC_REPLAY_CASES = [

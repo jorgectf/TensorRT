@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,9 +28,8 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::plugin::bert;
 
-namespace bert
-{
 namespace
 {
 char const* EMB_LAYER_NORM_VERSION{"1"};
@@ -166,7 +165,8 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
         auto cms0 = exprBuilder.constant(unfusedMaskSize);
 
         // this code must match getMHAMaskPackedSize in bertCommon.h
-        bool const isSmOK = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 ||mSM == kSM_90);
+        bool const isSmOK
+            = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 || mSM == kSM_90);
         bool const isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
         if (mUseFullMask || (isSmOK && isPrecisionOK))
         {
@@ -181,21 +181,18 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
             auto sel384 = exprBuilder.operation(DimensionOperation::kPROD, *is384, *cms384);
             auto maskSize = exprBuilder.operation(DimensionOperation::kSUM, *sel384, *sel128);
 
-            if (mMhaType == nvinfer1::DataType::kHALF)
-            {
-                // support 64, 96 only in fp16
-                auto cms64 = exprBuilder.constant(packedMaskSize64);
-                auto cms96 = exprBuilder.constant(packedMaskSize96);
-                auto c64 = exprBuilder.constant(64);
-                auto c96 = exprBuilder.constant(96);
+            // support 64, 96 in both int8 and fp16
+            auto cms64 = exprBuilder.constant(packedMaskSize64);
+            auto cms96 = exprBuilder.constant(packedMaskSize96);
+            auto c64 = exprBuilder.constant(64);
+            auto c96 = exprBuilder.constant(96);
 
-                auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
-                auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
-                auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
-                auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
-                auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
-                maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
-            }
+            auto is64 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c64);
+            auto is96 = exprBuilder.operation(DimensionOperation::kEQUAL, *inputs[0].d[SDIM], *c96);
+            auto sel64 = exprBuilder.operation(DimensionOperation::kPROD, *is64, *cms64);
+            auto sel96 = exprBuilder.operation(DimensionOperation::kPROD, *is96, *cms96);
+            auto maskSize2 = exprBuilder.operation(DimensionOperation::kSUM, *sel64, *sel96);
+            maskSize = exprBuilder.operation(DimensionOperation::kSUM, *maskSize, *maskSize2);
 
             auto is0 = exprBuilder.operation(DimensionOperation::kEQUAL, *maskSize, *exprBuilder.constant(0));
             auto sel0 = exprBuilder.operation(DimensionOperation::kPROD, *is0, *cms0);
@@ -209,7 +206,7 @@ DimsExprs EmbLayerNormPluginDynamic::getOutputDimensions(
 
         return ret;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -247,7 +244,7 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
             && desc.dims.d[SDIM] == prev.dims.d[SDIM] && desc.dims.d[3] == 1 && desc.dims.d[4] == 1;
     }
     // mask
-    return desc.type == DataType::kFLOAT;
+    return desc.type == DataType::kINT32;
 }
 
 void EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
@@ -301,7 +298,7 @@ void EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* i
     PLUGIN_ASSERT(inputs[1].desc.type == DataType::kINT32);
     PLUGIN_ASSERT(inputs[2].desc.type == DataType::kINT32);
     PLUGIN_ASSERT(outputs[0].desc.type == mType);
-    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kFLOAT);
+    PLUGIN_ASSERT(outputs[1].desc.type == DataType::kINT32);
 }
 
 size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
@@ -324,14 +321,14 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         auto const segmentIds = static_cast<int32_t const*>(inputs[1]);
         auto const inputMask = static_cast<int32_t const*>(inputs[2]);
 
-        const float* beta = mBetaDev.get();
-        const float* gamma = mGammaDev.get();
+        float const* beta = mBetaDev.get();
+        float const* gamma = mGammaDev.get();
         if (mType == DataType::kFLOAT)
         {
             auto output = static_cast<float*>(outputs[0]);
-            auto const wordEmb = static_cast<const float*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const float*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const float*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<float const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<float>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
                 gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
@@ -343,9 +340,9 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         else if (mType == DataType::kHALF)
         {
             auto output = static_cast<half*>(outputs[0]);
-            auto const wordEmb = static_cast<const half*>(mWordEmbDev.get());
-            auto const tokEmb = static_cast<const half*>(mTokEmbDev.get());
-            auto const posEmb = static_cast<const half*>(mPosEmbDev.get());
+            auto const wordEmb = static_cast<half const*>(mWordEmbDev.get());
+            auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
+            auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<half>(stream, static_cast<int>(mLd), batchSize, S, inputIds, segmentIds, beta,
                 gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
 
@@ -406,7 +403,7 @@ DataType EmbLayerNormPluginDynamic::getOutputDataType(
         PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
         return mType;
     }
-    return DataType::kFLOAT;
+    return DataType::kINT32;
 }
 
 // IPluginV2 Methods
@@ -527,12 +524,12 @@ char const* EmbLayerNormPluginDynamicCreator::getPluginVersion() const noexcept
     return EMB_LAYER_NORM_VERSION;
 }
 
-const PluginFieldCollection* EmbLayerNormPluginDynamicCreator::getFieldNames() noexcept
+PluginFieldCollection const* EmbLayerNormPluginDynamicCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(char const* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* EmbLayerNormPluginDynamicCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -640,7 +637,7 @@ IPluginV2* EmbLayerNormPluginDynamicCreator::deserializePlugin(
         // call EmbLayerNormPluginDynamic::destroy()
         return new EmbLayerNormPluginDynamic(name, serialData, serialLength);
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -653,7 +650,7 @@ void EmbLayerNormPluginDynamicCreator::setPluginNamespace(char const* libNamespa
     {
         mNamespace = libNamespace;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -663,6 +660,5 @@ char const* EmbLayerNormPluginDynamicCreator::getPluginNamespace() const noexcep
 {
     return mNamespace.c_str();
 }
-} // namespace bert
 
 #endif // CUDA_VERSION >= 10010

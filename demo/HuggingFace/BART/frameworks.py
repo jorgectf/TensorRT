@@ -25,6 +25,8 @@ from transformers import (
     BartForConditionalGeneration,
     BartTokenizer,
     BartConfig,
+    MBartForConditionalGeneration,
+    MBart50Tokenizer,
 )
 
 # torch
@@ -49,7 +51,7 @@ from NNDF.networks import (
 )
 from BART.export import BARTEncoderTorchFile, BARTDecoderTorchFile
 from BART.BARTModelConfig import BARTModelTRTConfig, BARTBenchmarkingArgs
-from BART.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam
+from BART.measurements import decoder_inference, encoder_inference, full_inference_greedy, full_inference_beam, calculate_perplexity
 from NNDF.general_utils import confirm_folder_delete, NNFolderWorkspace
 
 
@@ -73,9 +75,9 @@ class BARTHuggingFace(FrameworkCommand):
         
         trt_BART_config = self.config
         metadata_serialized = trt_BART_config.get_metadata_string(metadata)
-        workspace_dir = workspace.get_path()
-
-        pytorch_model_dir = os.path.join(workspace_dir, metadata_serialized)
+        workspace_dir, encoder_onnx_root, decoder_onnx_root = workspace.set_model_path(metadata_serialized, is_encoder_decoder = True)
+        pytorch_model_dir = os.path.join(workspace_dir, "pytorch_model")
+        
         # We keep track of the generated torch location for cleanup later
         self.torch_BART_dir = pytorch_model_dir
 
@@ -85,10 +87,15 @@ class BARTHuggingFace(FrameworkCommand):
             num_layers=BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
         ) # Note
         if not os.path.exists(pytorch_model_dir):
-            # Generate the pre-trained weights
-            model = BartForConditionalGeneration(tfm_config).from_pretrained(
-                metadata.variant
-            )
+            # mbart variant cannot be recognized by HF yet
+            if "mbart" not in metadata.variant:
+                # Generate the pre-trained weights
+                model = BartForConditionalGeneration(tfm_config).from_pretrained(
+                    metadata.variant
+                )
+            else:
+                model = MBartForConditionalGeneration.from_pretrained(metadata.variant)
+
             model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
             model.save_pretrained(pytorch_model_dir)
             print("Pytorch Model saved to {}".format(pytorch_model_dir))
@@ -96,18 +103,18 @@ class BARTHuggingFace(FrameworkCommand):
             print(
                 "Frameworks file already exists, skipping generation and loading from file instead."
             )
-            model = BartForConditionalGeneration(tfm_config).from_pretrained(
-                pytorch_model_dir
-            )
-            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
+            if "mbart" not in metadata.variant:
+                model = BartForConditionalGeneration(tfm_config).from_pretrained(
+                    pytorch_model_dir
+                )
+            else:
+                model = MBartForConditionalGeneration.from_pretrained(pytorch_model_dir)
 
-        # These ONNX models can be converted using special encoder and decoder classes.
-        root_onnx_model_name = "{}.onnx".format(metadata_serialized)
-        root_onnx_model_fpath = os.path.join(
-            os.getcwd(), workspace_dir, root_onnx_model_name
-        )
-        encoder_onnx_model_fpath = root_onnx_model_fpath + "-encoder.onnx"
-        decoder_onnx_model_fpath = root_onnx_model_fpath + "-decoder-with-lm-head.onnx"
+            model.config.use_cache = cache_variant # somehow the use_cache config automatically set to True even though specified in tfm_config before. Force change
+        
+        # These ONNX models can be converted using special encoder and decoder classes.        
+        encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
+        decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
 
         BART_encoder = BARTEncoderTorchFile(model, metadata)
         BART_decoder = BARTDecoderTorchFile(model, metadata)
@@ -155,15 +162,6 @@ class BARTHuggingFace(FrameworkCommand):
             if self.onnx_BART_encoder is not None:
                 self.onnx_BART_encoder.cleanup()
 
-            # Remove any onnx external files by removing integer named values and weight files
-            workspace_path = workspace.get_path()
-            for d in os.listdir(workspace_path):
-                fpath = os.path.join(workspace_path, d)
-                if os.path.isfile(fpath) and os.path.splitext(d)[1] == ".weight":
-                    os.remove(fpath)
-                elif d.isnumeric():
-                    os.remove(fpath)
-
         if not keep_pytorch_model:
             # Using rmtree can be dangerous, have user confirm before deleting.
             confirm_folder_delete(
@@ -173,6 +171,31 @@ class BARTHuggingFace(FrameworkCommand):
 
         if not keep_pytorch_model and not keep_onnx_model:
             workspace.cleanup(force_remove=False)
+
+    def setup_tokenizer_and_model(
+        self,
+        metadata: NetworkMetadata,
+        network_fpaths: NetworkModels,
+    ):
+        tokenizer = BartTokenizer.from_pretrained(metadata.variant)
+
+        # By default, huggingface model structure is one giant file.
+        BART_torch_fpath = network_fpaths.torch[0].fpath
+        config = BartConfig(
+            use_cache=metadata.other.kv_cache,
+            num_layers=BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
+        )
+        BART_model = BartForConditionalGeneration(config).from_pretrained(BART_torch_fpath)
+        if "mbart" in metadata.variant:
+            BART_model = MBartForConditionalGeneration(config).from_pretrained(BART_torch_fpath)
+            tokenizer = MBart50Tokenizer.from_pretrained(metadata.variant, src_lang="en_XX")
+
+        BART_torch_encoder = BARTEncoderTorchFile.TorchModule(BART_model.get_encoder())
+        BART_torch_decoder = BARTDecoderTorchFile.TorchModule(
+            BART_model.get_decoder(), BART_model.lm_head, BART_model.final_logits_bias, BART_model.config
+        )
+
+        return tokenizer, BART_torch_encoder, BART_torch_decoder
 
     def execute_inference(
         self,
@@ -187,8 +210,7 @@ class BARTHuggingFace(FrameworkCommand):
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> Union[NetworkResult, BenchmarkingResult]:
 
-        # Execute some tests
-        tokenizer = BartTokenizer.from_pretrained(metadata.variant)
+        tokenizer, BART_torch_encoder, BART_torch_decoder = self.setup_tokenizer_and_model(metadata, network_fpaths)
 
         # Prepare the input tokens and find output sequence length.
         if not benchmarking_mode:
@@ -200,24 +222,18 @@ class BARTHuggingFace(FrameworkCommand):
             output_seq_len = benchmarking_args.output_seq_len if benchmarking_args.output_seq_len > 0 else max_seq_len
             input_ids = torch.randint(0, BARTModelTRTConfig.VOCAB_SIZE[metadata.variant], (batch_size, input_seq_len))
 
-        # By default, huggingface model structure is one giant file.
-        BART_torch_fpath = network_fpaths.torch[0].fpath
-        config = BartConfig(
-            use_cache=metadata.other.kv_cache,
-            num_layers=BARTModelTRTConfig.NUMBER_OF_LAYERS[metadata.variant],
-        )
-        BART_model = BartForConditionalGeneration(config).from_pretrained(BART_torch_fpath)
-        
-        BART_torch_encoder = BARTEncoderTorchFile.TorchModule(BART_model.get_encoder())
-        BART_torch_decoder = BARTDecoderTorchFile.TorchModule(
-            BART_model.get_decoder(), BART_model.lm_head, BART_model.final_logits_bias, BART_model.config
-        )
-
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             BART_torch_encoder, input_ids, timing_profile, use_cuda=(not use_cpu)
         )
+        
+        # Need to feed the decoder a new empty input_ids for text generation.
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
+        decoder_input_ids = torch.full(
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+        )
+
         _, decoder_e2e_time = decoder_inference(
-            BART_torch_decoder, input_ids, encoder_last_hidden_state, timing_profile, use_cuda=(not use_cpu), use_cache=metadata.other.kv_cache
+            BART_torch_decoder, decoder_input_ids, encoder_last_hidden_state, timing_profile, use_cuda=(not use_cpu), use_cache=metadata.other.kv_cache
         )
 
         if num_beams == 1:
@@ -227,11 +243,11 @@ class BARTHuggingFace(FrameworkCommand):
                 input_ids,
                 tokenizer,
                 timing_profile,
-                max_length=output_seq_len, # note: T5 uses XXModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant] which is the max input length. Here should rather be the max output length for generation
+                max_length=output_seq_len,
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=(not use_cpu),
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -242,10 +258,9 @@ class BARTHuggingFace(FrameworkCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 batch_size=batch_size,
                 use_cache=metadata.other.kv_cache,
-                early_stopping=(not benchmarking_mode),
             )
         
         # Prepare runtime results.
@@ -278,11 +293,27 @@ class BARTHuggingFace(FrameworkCommand):
 
         return NetworkResult(
             input=inference_input,
-            output_tensor=encoder_last_hidden_state,
+            output_tensor=decoder_output,
             semantic_output=semantic_outputs,
             median_runtime=runtime,
             models=network_fpaths,
         )
+
+    def execute_calculate_perplexity(
+        self,
+        metadata: NetworkMetadata,
+        network_fpaths: NetworkModels,
+        encoder_input: str,
+        decoder_input: str,
+    ):
+        tokenizer, BART_torch_encoder, BART_torch_decoder = self.setup_tokenizer_and_model(metadata, network_fpaths)
+        encoder_input_ids = tokenizer([encoder_input], padding=True, return_tensors="pt").input_ids
+        decoder_input_ids = tokenizer([decoder_input], padding=True, return_tensors="pt").input_ids
+        perplexity = calculate_perplexity(
+            BART_torch_encoder, BART_torch_decoder, tokenizer, encoder_input_ids, decoder_input_ids,
+            BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
+        )
+        return perplexity
 
     def run_framework(
         self,
@@ -296,11 +327,13 @@ class BARTHuggingFace(FrameworkCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
         """
         Main entry point of our function which compiles and generates our model data.
         """
-        results = []
+        inference_results = []
+        ppl_results = []
         workspace = NNFolderWorkspace(
             self.config.network_name, metadata, working_directory
         )
@@ -308,20 +341,28 @@ class BARTHuggingFace(FrameworkCommand):
             network_fpaths = self.generate_and_download_framework(metadata, workspace)
             if not benchmarking_mode:
                 for ninput in network_input:
-                    results.append(
+                    inference_results.append(
                         self.execute_inference(
                             metadata, network_fpaths, ninput, timing_profile, use_cpu, batch_size, args.num_beams
                         )
                     )
+                if perplexity_reference is not None:
+                    assert len(network_input) == len(perplexity_reference), "Encoder and decoder inputs must pair up"
+                    for ei, di in zip(network_input, perplexity_reference):
+                        ppl_results.append(
+                            self.execute_calculate_perplexity(
+                                metadata, network_fpaths, ei, di
+                            )
+                        )
             else:
                 benchmarking_args = BARTBenchmarkingArgs(args.input_seq_len, args.output_seq_len)
-                results = self.execute_inference(
+                inference_results = self.execute_inference(
                     metadata, network_fpaths, None, timing_profile, use_cpu, batch_size, args.num_beams, True, benchmarking_args
                 )
         finally:
             self.cleanup(workspace, keep_onnx_model, keep_pytorch_model)
 
-        return results
+        return inference_results, ppl_results
 
 
 # Entry point

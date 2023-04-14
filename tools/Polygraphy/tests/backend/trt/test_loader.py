@@ -44,7 +44,7 @@ from polygraphy.backend.trt import (
     set_tensor_formats,
     create_network,
 )
-from polygraphy.common.struct import MetadataTuple
+from polygraphy.common.struct import MetadataTuple, BoundedShape
 from polygraphy.comparator import DataLoader
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
@@ -184,7 +184,6 @@ class TestModifyNetwork:
         with builder, network, parser:
             assert network.num_outputs == 2
             assert network.get_output(1).name == "reduce_prod_out_gs_2"
-            assert network.get_output(1).is_shape_tensor
 
     def test_unmark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(
@@ -212,27 +211,30 @@ class TestModifyNetwork:
             assert network.get_output(0).name == "Slice"
             assert network.get_output(0) == slice
 
+
 class TestPostprocessNetwork:
     def test_basic(self, modifiable_network):
         """Tests that the callback is actually invoked by Polygraphy."""
         func_called = False
+
         def func(network):
             nonlocal func_called
             func_called = True
             assert isinstance(network, trt.INetworkDefinition)
-        builder, network, parser = postprocess_network(
-            modifiable_network, func)
+
+        builder, network, parser = postprocess_network(modifiable_network, func)
         assert func_called
 
     def test_kwargs(self, modifiable_network):
         """Tests that callbacks that use **kwargs work as expected."""
         func_called = False
+
         def func(**kwargs):
             nonlocal func_called
             func_called = True
-            assert isinstance(kwargs['network'], trt.INetworkDefinition)
-        builder, network, parser = postprocess_network(
-            modifiable_network, func)
+            assert isinstance(kwargs["network"], trt.INetworkDefinition)
+
+        builder, network, parser = postprocess_network(modifiable_network, func)
         assert func_called
 
     def test_modify_network(self, modifiable_network):
@@ -246,8 +248,7 @@ class TestPostprocessNetwork:
                 if layer.name == "onnx_graphsurgeon_node_3":
                     layer.precision = trt.int8
 
-        builder, network, parser = postprocess_network(
-            modifiable_network, func)
+        builder, network, parser = postprocess_network(modifiable_network, func)
 
         with builder, network, parser:
             assert network[0].precision == trt.float16
@@ -255,11 +256,10 @@ class TestPostprocessNetwork:
 
     def test_negative_non_callable(self, modifiable_network):
         """Tests that PostprocessNetwork properly rejects `func` objects that
-           are not callable."""
+        are not callable."""
 
         with pytest.raises(PolygraphyException, match=r"Object .* is not a callable"):
-            builder, network, parser = postprocess_network(
-                modifiable_network, None)
+            builder, network, parser = postprocess_network(modifiable_network, None)
 
 
 class TestSetLayerPrecisions:
@@ -361,7 +361,7 @@ class TestEngineFromNetwork:
             assert calibrator.input_metadata is not None
             assert "x" in calibrator.data_loader.input_metadata
             assert calibrator.data_loader.input_metadata["x"] == MetadataTuple(
-                shape=(1, 1, 2, 2), dtype=np.dtype(np.float32)
+                shape=BoundedShape((1, 1, 2, 2)), dtype=np.dtype(np.float32)
             )
 
         if use_config_loader:

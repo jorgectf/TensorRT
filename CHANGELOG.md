@@ -1,5 +1,56 @@
 # TensorRT OSS Release Changelog
 
+## [8.6.0 EA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2023-03-14
+
+TensorRT OSS release corresponding to TensorRT 8.6.0.12 EA release.
+- Updates since [TensorRT 8.5.3 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3).
+- Please refer to the [TensorRT 8.6.0.12 EA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) for more information.
+
+Key Features and Updates:
+
+- demoDiffusion acceleration is now supported out of the box in TensorRT without requiring plugins.
+  - The following plugins have been removed accordingly: GroupNorm, LayerNorm, MultiHeadCrossAttention, MultiHeadFlashAttention, SeqLen2Spatial, and SplitGeLU.
+- Added a new sample called onnx_custom_plugin.
+
+## [8.5.3 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) - 2023-01-30
+
+TensorRT OSS release corresponding to TensorRT 8.5.3.1 GA release.
+- Updates since [TensorRT 8.5.2 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2).
+- Please refer to the [TensorRT 8.5.3 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-3) for more information.
+
+Key Features and Updates:
+
+- Added the following HuggingFace demos: GPT-J-6B, GPT2-XL, and GPT2-Medium
+- Added nvinfer1::plugin namespace
+- Optimized KV Cache performance for T5
+
+## [8.5.2 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) - 2022-12-12
+
+TensorRT OSS release corresponding to TensorRT 8.5.2.2 GA release.
+- Updates since [TensorRT 8.5.1 GA release](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1).
+- Please refer to the [TensorRT 8.5.2 GA release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-2) for more information.
+
+Key Features and Updates:
+
+- Plugin enhancements
+  - Added [LayerNormPlugin](plugin/layerNormPlugin), [SplitGeLUPlugin](plugin/splitGeLUPlugin), [GroupNormPlugin](plugin/groupNormPlugin), and [SeqLen2SpatialPlugin](plugin/seqLen2SpatialPlugin) to support [stable diffusion demo](demo/Diffusion).
+- KV-cache and beam search to GPT2 and T5 demos
+
+## [22.12](https://github.com/NVIDIA/TensorRT/releases/tag/22.12) - 2022-12-06
+
+### Added
+- Stable Diffusion demo using TensorRT Plugins
+- KV-cache and beam search to GPT2 and T5 demos
+- Perplexity calculation to all HF demos
+
+### Changed
+- Updated trex to v0.1.5
+- Increased default workspace size in demoBERT to build BS=128 fp32 engines
+- Use `avg_iter=8` and timing cache to make demoBERT perf more stable
+
+### Removed
+- None
+
 ## [8.5.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#rel-8-5-1) - 2022-11-01
 
 TensorRT OSS release corresponding to TensorRT 8.5.1.7 GA release.
@@ -377,7 +428,7 @@ Identical to the TensorRT-OSS [8.0.1](https://github.com/NVIDIA/TensorRT/release
 
 ## [8.0.1](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/tensorrt-8.html#tensorrt-8) - 2021-07-02
 ### Added
-- Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details](). 
+- Added support for the following ONNX operators: `Celu`, `CumSum`, `EyeLike`, `GatherElements`, `GlobalLpPool`, `GreaterOrEqual`, `LessOrEqual`, `LpNormalization`, `LpPool`, `ReverseSequence`, and `SoftmaxCrossEntropyLoss` [details]().
 - Rehauled `Resize` ONNX operator, now fully supporting the following modes:
   - Coordinate Transformation modes: `half_pixel`, `pytorch_half_pixel`, `tf_half_pixel_for_nn`, `asymmetric`, and `align_corners`.
   - Modes: `nearest`, `linear`.

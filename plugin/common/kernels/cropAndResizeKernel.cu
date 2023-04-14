@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,10 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T>
 __global__ void cropAndResizeKernel(const int nthreads, const T* image_ptr, const float* boxes_ptr,
                                     int num_boxes, int batch, int image_height, int image_width,
@@ -138,3 +142,5 @@ int cropAndResizeInference(
             static_cast<float*>(output));
     return 0;
 }
+} // namespace plugin
+} // namespace nvinfer1

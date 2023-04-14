@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 #include "common/bboxUtils.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cuda_fp16.h"
 #include <array>
-using namespace nvinfer1;
-
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T_BBOX>
 __device__ float bboxSize(const Bbox<T_BBOX>& bbox, const bool normalized)
 {
@@ -388,3 +390,5 @@ pluginStatus_t allClassNMS(cudaStream_t stream, const int num, const int num_cla
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

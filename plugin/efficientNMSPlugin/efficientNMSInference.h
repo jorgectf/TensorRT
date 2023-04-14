@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,8 +24,8 @@
 
 size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, nvinfer1::DataType datatype);
 
-pluginStatus_t EfficientNMSInference(nvinfer1::plugin::EfficientNMSParameters param, const void* boxesInput,
-    const void* scoresInput, const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput,
+pluginStatus_t EfficientNMSInference(nvinfer1::plugin::EfficientNMSParameters param, void const* boxesInput,
+    void const* scoresInput, void const* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput,
     void* nmsScoresOutput, void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream);
 
 #endif

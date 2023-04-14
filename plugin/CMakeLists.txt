@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@ set(STATIC_TARGET ${TARGET_NAME}_static)
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports.map)
+set(PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports.def)
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
@@ -48,6 +49,7 @@ set(PLUGIN_LISTS
     groupNormalizationPlugin
     instanceNormalizationPlugin
     leakyReluPlugin
+    modulatedDeformConvPlugin
     multilevelCropAndResizePlugin
     multilevelProposeROI
     multiscaleDeformableAttnPlugin
@@ -67,7 +69,7 @@ set(PLUGIN_LISTS
     specialSlicePlugin
     splitPlugin
     voxelGeneratorPlugin
-    )
+)
 
 # Add BERT sources if ${BERT_GENCODES} was populated
 if(BERT_GENCODES)
@@ -101,7 +103,7 @@ if (BERT_CU_SOURCES)
     list(APPEND PLUGIN_SOURCES "${BERT_CU_SOURCES}")
 endif()
 
-list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/InferPlugin.cpp")
+list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/inferPlugin.cpp")
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../samples/common/logger.cpp")
 
 ################################## SHARED LIBRARY #######################################
@@ -130,7 +132,11 @@ set_target_properties(${SHARED_TARGET} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
 
-set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+if (MSVC)
+    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "/DEF:${PLUGIN_EXPORT_DEF}")
+else()
+    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+endif()
 
 set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
@@ -143,9 +149,14 @@ target_link_libraries(${SHARED_TARGET}
     ${CUBLASLT_LIB}
     ${CUDART_LIB}
     ${CUDNN_LIB}
-    nvinfer
+    ${nvinfer_LIB_PATH}
     ${CMAKE_DL_LIBS}
 )
+
+# Needed when static linking CUDART
+if (NOT MSVC)
+    target_link_libraries(${SHARED_TARGET} Threads::Threads ${RT_LIB})
+endif()
 
 ################################## STATIC LIBRARY #######################################
 

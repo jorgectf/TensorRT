@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,14 +30,12 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
-
-namespace bert
-{
+using namespace nvinfer1::plugin::bert;
 
 namespace
 {
-const char* QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION{"3"};
-const char* QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
+char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION{"3"};
+char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
 
 // Static class fields initialization
@@ -48,8 +46,8 @@ REGISTER_TENSORRT_PLUGIN(QKVToContextInterleavedPluginCreator);
 
 constexpr uint32_t IIDX = 0; // index of the input tensor
 
-QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
-    std::string const name, int const hiddenSize, int const numHeads, float const dqProbs, bool const useInt8ScaleMax)
+QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, int32_t const hiddenSize,
+    int32_t const numHeads, float const dqProbs, bool const useInt8ScaleMax)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -63,13 +61,13 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
     PLUGIN_VALIDATE((mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_AMPERE_10B || mSM == kSM_TURING
-               || mSM == kSM_XAVIER || mSM == kSM_ADA_10X || mSM == kSM_HOPPER_100)
+                        || mSM == kSM_XAVIER || mSM == kSM_ADA_10X || mSM == kSM_HOPPER_100)
         && "requesting maxSeqlen not compatible with GPU arch");
     // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
     mXmmaKernel = getXMMAKernelsV2(DATA_TYPE_INT8, mSM);
 }
 
-QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(const std::string name, const void* data, size_t length)
+QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, void const* data, size_t length)
     : mLayerName(name)
 {
     deserialize_value(&data, &length, &mNumHeads);
@@ -110,7 +108,7 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextInterleavedPlugin::clone() const noex
 }
 
 DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
-    int outputIndex, const DimsExprs* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
+    int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     // Input SHAPE is 1x(3*N*H)xTotalx1 (NCHW)
     // Output SHAPE is 1x(N*H)xTotalx1
@@ -121,12 +119,12 @@ DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
     DimsExprs output(inputs[IIDX]);
     // output.d[0] = exprBuilder.constant(1);
     // Divide last dim by three
-    const auto* three = exprBuilder.constant(3);
+    auto const* three = exprBuilder.constant(3);
     output.d[1] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[IIDX].d[1], *three);
     return output;
 }
 bool QKVToContextInterleavedPlugin::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) noexcept
+    int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 3);
     PLUGIN_ASSERT(nbOutputs == 1);
@@ -143,7 +141,7 @@ bool QKVToContextInterleavedPlugin::supportsFormatCombination(
     if (pos == 1)
     {
         // cuSeqlens is a int array of size B+1
-        const auto* seqlens = &inOut[pos];
+        auto const* seqlens = &inOut[pos];
         return (seqlens->type == DataType::kINT32) && (seqlens->format == TensorFormat::kLINEAR);
     }
     if (pos == 2)
@@ -155,33 +153,33 @@ bool QKVToContextInterleavedPlugin::supportsFormatCombination(
 }
 
 void QKVToContextInterleavedPlugin::configurePlugin(
-    const DynamicPluginTensorDesc* in, int nbInputs, const DynamicPluginTensorDesc* out, int nbOutputs) noexcept
+    DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
 {
 }
 
 size_t QKVToContextInterleavedPlugin::getWorkspaceSize(
-    const PluginTensorDesc* inputs, int nbInputs, const PluginTensorDesc* outputs, int nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs, int nbOutputs) const noexcept
 {
     return 0;
 }
 
 // IPluginV2Ext Methods
 DataType QKVToContextInterleavedPlugin::getOutputDataType(
-    int index, const nvinfer1::DataType* inputTypes, int nbInputs) const noexcept
+    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kINT8;
 }
 
 // IPluginV2 Methods
-const char* QKVToContextInterleavedPlugin::getPluginType() const noexcept
+char const* QKVToContextInterleavedPlugin::getPluginType() const noexcept
 {
-    return QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME;
 }
 
-const char* QKVToContextInterleavedPlugin::getPluginVersion() const noexcept
+char const* QKVToContextInterleavedPlugin::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION;
 }
 
 int QKVToContextInterleavedPlugin::getNbOutputs() const noexcept
@@ -219,23 +217,23 @@ void QKVToContextInterleavedPlugin::destroy() noexcept
     delete this;
 }
 
-void QKVToContextInterleavedPlugin::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextInterleavedPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextInterleavedPlugin::getPluginNamespace() const noexcept
+char const* QKVToContextInterleavedPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
-int QKVToContextInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
-    const int total = inputDesc[0].dims.d[2];
-    const int B = inputDesc[1].dims.d[0] - 1;
-    const int maxS = inputDesc[2].dims.d[0];
+    int const total = inputDesc[0].dims.d[2];
+    int const B = inputDesc[1].dims.d[0] - 1;
+    int const maxS = inputDesc[2].dims.d[0];
     int S = 384;
     if (maxS <= 128)
     {
@@ -268,9 +266,9 @@ int QKVToContextInterleavedPlugin::enqueue(const PluginTensorDesc* inputDesc, co
     float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
     float scaleSoftmax = 1.F / mDqProbs;
 
-    params.scale_bmm1 = reinterpret_cast<const uint32_t&>(scaleBmm1);
-    params.scale_bmm2 = reinterpret_cast<const uint32_t&>(scaleBmm2);
-    params.scale_softmax = reinterpret_cast<const uint32_t&>(scaleSoftmax);
+    params.scale_bmm1 = reinterpret_cast<uint32_t const&>(scaleBmm1);
+    params.scale_bmm2 = reinterpret_cast<uint32_t const&>(scaleBmm2);
+    params.scale_softmax = reinterpret_cast<uint32_t const&>(scaleSoftmax);
 
     params.qkv_stride_in_bytes = total;
     params.o_stride_in_bytes = total;
@@ -303,22 +301,23 @@ QKVToContextInterleavedPluginCreator::QKVToContextInterleavedPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-const char* QKVToContextInterleavedPluginCreator::getPluginName() const noexcept
+char const* QKVToContextInterleavedPluginCreator::getPluginName() const noexcept
 {
-    return QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME;
+    return kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME;
 }
 
-const char* QKVToContextInterleavedPluginCreator::getPluginVersion() const noexcept
+char const* QKVToContextInterleavedPluginCreator::getPluginVersion() const noexcept
 {
-    return QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION;
+    return kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION;
 }
 
-const PluginFieldCollection* QKVToContextInterleavedPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* QKVToContextInterleavedPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) noexcept
+IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -378,7 +377,8 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(const char* name, 
 
         auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
 
-        QKVToContextInterleavedPlugin* p = new QKVToContextInterleavedPlugin(name, hiddenSize, numHeads, dqProbs, useInt8ScaleMaxFlag);
+        QKVToContextInterleavedPlugin* p
+            = new QKVToContextInterleavedPlugin(name, hiddenSize, numHeads, dqProbs, useInt8ScaleMaxFlag);
         return p;
     }
     catch (std::exception const& e)
@@ -389,7 +389,7 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(const char* name, 
 }
 
 IPluginV2* QKVToContextInterleavedPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength)  noexcept
+    char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -404,13 +404,12 @@ IPluginV2* QKVToContextInterleavedPluginCreator::deserializePlugin(
     return nullptr;
 }
 
-void QKVToContextInterleavedPluginCreator::setPluginNamespace(const char* libNamespace) noexcept
+void QKVToContextInterleavedPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     mNamespace = libNamespace;
 }
 
-const char* QKVToContextInterleavedPluginCreator::getPluginNamespace() const noexcept
+char const* QKVToContextInterleavedPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
-} // namespace bert

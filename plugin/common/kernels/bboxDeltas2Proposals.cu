@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include <algorithm>
 #include <array>
 #include <math.h>
 #include <stdio.h>
 
-using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 using std::max;
 using std::min;
 
@@ -283,3 +286,5 @@ pluginStatus_t bboxDeltas2Proposals(cudaStream_t stream,
     }
     return STATUS_BAD_PARAM;
 }
+} // namespace plugin
+} // namespace nvinfer1

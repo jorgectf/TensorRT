@@ -17,7 +17,8 @@
 
 """Utilities related to Polygraphy"""
 
-from typing import List
+from typing import Dict, List
+from functools import reduce
 
 # polygraphy
 from polygraphy.backend.trt import engine_from_bytes, TrtRunner
@@ -40,7 +41,44 @@ from NNDF.networks import NetworkMetadata
 from NNDF.models import TRTEngineFile
 from NNDF.logger import G_LOGGER
 
+# PyTorch
+import torch
+
 # Helper Functions
+def setup_benchmark_arg(user_input, name, default):
+    '''
+    Set up benchmarking arguments for trt
+    '''
+    if user_input is None:
+        G_LOGGER.warning("{} is not provided, default to {}".format(name, default))
+        return default
+    return user_input
+
+def allocate_binding_buffer(types_dict, shapes_dict):
+    '''
+    Allocate binding buffers for trt based on provided types and shapes dict
+    '''
+    return {
+        k: torch.zeros(reduce(lambda v, a: v*a, shape), dtype=types_dict[k]).cuda()
+        for k, shape in shapes_dict.items()
+    }
+
+
+def set_kv_data(kv_dict, past_or_present, layer_id, segment_value_dict):
+    '''
+    Set the types and shapes dict for kv-cache based on the provided inputs:
+        kv_dict: Dict[str, tuple/torch.dtype], the dict to modify within the function
+        past_or_present: str, either "past" or "present"
+        layer_id: int, need kv cache for each decoder layer
+        segment_value_dict: Dict[str, tuple/torch.dtype], example: 
+            kvcache type: {"encoder": torch.float32, "decoder": torch.float32}
+            kvcache shape: {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
+    '''
+    for segment, value in segment_value_dict.items():
+        for code in ['key', 'value']:
+            kv_dict[f"{past_or_present}_key_values.{layer_id}.{segment}.{code}"] = value
+            
+
 def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float, max: float, ignore_nodes: List = None):
     """
     Clamps given onnx model to targeted upper and lower bounds.
@@ -67,7 +105,7 @@ def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float
             np.clip(node_attr.values, min, max, out=node_attr.values)
 
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
 
 
 def clamp_weights_onnx_to_fp16_bounds(onnx_input_fpath: str, onnx_output_fpath: str, ignore_nodes: List = None):
@@ -84,6 +122,10 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
 
     graph = gs.import_onnx(onnx.load(onnx_input_fpath))
     cast_nodes = [node for node in graph.nodes if node.op == "Cast"]
+    # Version check for backward compatibility
+    torch_version_major = int(torch.__version__.split('.')[0])
+    torch_version_minor = int(torch.__version__.split('.')[1])
+    version_check = torch_version_major == 1 and torch_version_minor > 12
     for n in cast_nodes:
         # Cast appears at the output of add and feeds into a Pow op.
         if n.i().op == "Add":
@@ -94,16 +136,43 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
                         found_pow = True
 
             if found_pow:
-                n.i().outputs = n.outputs
-                n.outputs.clear()
+                if version_check:
+                    # Using Clip would be the simplest way, but unfortunately TRT refuses to put "Clip" on Myelin. The WAR
+                    # is to insert a Max followed by a Min instead.
+                    # Replace the Cast with Max + Min
+                    n.op = "Max"
+                    n.name = n.name.replace("Cast", "Max")
+                    n.attrs = {}
+                    lower_bound = gs.Constant(n.name + "/lower_bound", np.array(-64000.0, dtype=np.float32))
+                    n.inputs = [n.inputs[0], lower_bound]
+
+                    max_node_output = n.outputs[0]
+                    # Max has already exist, avoid tensors with same names
+                    max_node_output.name = max_node_output.name.replace("Cast", "ClipMax")
+
+                    upper_bound = gs.Constant(n.name + "/upper_bound", np.array(64000.0, dtype=np.float32))
+                    min_node_inputs = [max_node_output, upper_bound]
+
+                    min_node_output = gs.Variable(max_node_output.name.replace("ClipMax", "ClipMin"), dtype = np.float32)
+                    min_node = gs.Node(op="Min", inputs = min_node_inputs, outputs = [min_node_output], attrs = {})
+                    graph.nodes.append(min_node)
+
+                    for o in max_node_output.outputs:
+                        # To avoid loop in graph
+                        if o.op != "Min":
+                            o.inputs = [min_node_output if i == max_node_output else i for i in o.inputs]
+                else:
+                    n.i().outputs = n.outputs
+                    n.outputs.clear()
 
     graph.cleanup().toposort()
+
     add_nodes = [node for node in graph.nodes if node.op == "Add"]
     for n in add_nodes:
-        if n.o().op == "Pow":
+        if (version_check and (n.o().o().o().op == "Pow")) or ((not version_check) and (n.o().op == "Pow")):
             add_inputs = n.inputs
             outs = []
-            for i in  add_inputs:
+            for i in add_inputs:
                 identity_out = gs.Variable("identity_out" + i.name, dtype=np.float32)
                 new_cast = gs.Node(op="Cast", inputs=[i], outputs=[identity_out], attrs={"to": 1})
                 outs.append(identity_out)
@@ -112,7 +181,7 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
 
     graph.cleanup().toposort()
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=True)
+    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
 
 # Helper Classes
 class TRTNativeRunner:

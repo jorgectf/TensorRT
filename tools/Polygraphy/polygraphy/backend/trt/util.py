@@ -73,6 +73,10 @@ def get_trt_logger():
     return TRT_LOGGER
 
 
+def _should_use_v3_api():
+    return mod.version(trt.__version__) > mod.version("8.5.0.9")
+
+
 def fail_unavailable(what):
     G_LOGGER.backtrace()
     G_LOGGER.critical(f"{what} is not available on TensorRT version {trt.__version__}.")
@@ -147,6 +151,9 @@ def get_layer_class_mapping():
     try_add("ONE_HOT", "IOneHotLayer")
     try_add("NON_ZERO", "INonZeroLayer")
     try_add("NMS", "INMSLayer")
+    try_add("REVERSE_SEQUENCE", "IReverseSequenceLayer")
+    try_add("NORMALIZATION", "INormalizationLayer")
+    try_add("CAST", "ICastLayer")
 
     return layer_class_mapping
 
@@ -450,18 +457,22 @@ def str_from_tensor(tensor, is_shape_tensor):
     return ret
 
 
-def get_input_metadata_from_network(network, profile=None):
+# Note: When `force_opt_shapes=True` this method is treated as being specific to calibration.
+def get_input_metadata_from_network(network, profile, force_opt_shapes=None):
     """
-    Returns metadata about the inputs of a network, referring to the opt values
-    set in a profile if available.
+    Returns metadata about the inputs of a network, referring to the values
+    set in a profile for dynamic shapes.
 
     Args:
         network (trt.INetworkDefinition):
                 The network the profile applies to.
-
-
         profile (trt.IOptimizationProfile):
                 The profile from which to retrieve input metadata.
+
+        force_opt_shapes (bool):
+                Whether to ignore the minimum and maximum shapes in the profile
+                and always use OPT shapes.
+                Defaults to False.
 
     Returns:
         TensorMetadata:
@@ -473,35 +484,37 @@ def get_input_metadata_from_network(network, profile=None):
                 If the network has dynamic shapes or shape tensor inputs but no profile
                 was provided.
     """
+    force_opt_shapes = util.default(force_opt_shapes, False)
+
     input_metadata = TensorMetadata()
     for index in range(network.num_inputs):
         tensor = network.get_input(index)
         # Only access the profile if we actually need to.
         # This way, this method works with static networks even without a profile set.
-        if not tensor.is_shape_tensor and not util.is_shape_dynamic(tensor.shape):
-            shape = tensor.shape
-        else:
-            if profile is None:
-                G_LOGGER.critical(
-                    f"Could not retrieve shape of tensor: {tensor.name} because it "
-                    + ("is a shape tensor" if tensor.is_shape_tensor else "has a dynamic shape")
-                    + " and no profile was provided. "
-                )
-
+        min_shape = None
+        max_shape = None
+        opt_shape = tensor.shape
+        if tensor.is_shape_tensor or util.is_shape_dynamic(tensor.shape):
             if tensor.is_shape_tensor:
                 min_shape, opt_shape, max_shape = profile.get_shape_input(tensor.name)
             else:
                 min_shape, opt_shape, max_shape = profile.get_shape(tensor.name)
 
-            if tuple(min_shape) != tuple(max_shape):
+            if force_opt_shapes and tuple(min_shape) != tuple(max_shape):
                 G_LOGGER.warning(
-                    "Will use `opt` shapes from profile 0 for calibration. "
-                    "Note that even though `min` != `max` in this profile, calibration "
-                    "will use fixed input shapes. This is not necessarily an issue."
+                    "TensorRT does not currently support using dynamic shapes during calibration. "
+                    "The `OPT` shapes from the calibration profile will be used for tensors with dynamic shapes. "
+                    "Calibration data is expected to conform to those shapes. ",
+                    mode=LogMode.ONCE,
                 )
-            # Always use opt shape
-            shape = opt_shape
-        input_metadata.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=shape)
+
+        input_metadata.add(
+            name=tensor.name,
+            dtype=np_dtype_from_trt(tensor.dtype),
+            shape=opt_shape if force_opt_shapes else tensor.shape,
+            min_shape=None if force_opt_shapes else min_shape,
+            max_shape=None if force_opt_shapes else max_shape,
+        )
     return input_metadata
 
 
@@ -527,7 +540,8 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
             return
 
     try:
-        input_metadata = get_input_metadata_from_network(network, calib_profile)
+        # TensorRT does not currently support shapes other than the OPT shape.
+        input_metadata = get_input_metadata_from_network(network, calib_profile, force_opt_shapes=True)
     except PolygraphyException as err:
         G_LOGGER.warning(
             "Could not determine input_metadata to provide to the calibrator because no calibration profile is set. "
@@ -539,67 +553,76 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
         calibrator.set_input_metadata(input_metadata)
 
 
-def add_binding_to_metadata(engine, binding, metadata, name_binding):
-    # name_binding always comes from profile 0, since that's where we
-    # get all binding names in the runner
-    metadata.add(
-        name=engine[name_binding],
-        dtype=np_dtype_from_trt(engine.get_binding_dtype(binding)),
-        shape=list(engine.get_binding_shape(binding)),
-    )
+def get_metadata_from_engine(engine, mode):
+    meta = TensorMetadata()
+    for idx in range(engine.num_io_tensors):
+        name = engine.get_tensor_name(idx)
+        if engine.get_tensor_mode(name) != mode:
+            continue
 
-
-def get_input_metadata_from_engine(engine, start_binding, end_binding):
-    inputs = TensorMetadata()
-    for index, binding in enumerate(range(start_binding, end_binding)):
-        if engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, inputs, name_binding=index)
-    return inputs
-
-
-def get_output_metadata_from_engine(engine, start_binding, end_binding):
-    outputs = TensorMetadata()
-    for index, binding in enumerate(range(start_binding, end_binding)):
-        if not engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, outputs, name_binding=index)
-    return outputs
+        meta.add(name=name, dtype=np_dtype_from_trt(engine.get_tensor_dtype(name)), shape=engine.get_tensor_shape(name))
+    return meta
 
 
 def str_from_engine(engine, show_layers=None, show_attrs=None):
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
 
-    bindings_per_profile = get_bindings_per_profile(engine)
+    if _should_use_v3_api():
+        num_io_tensors = engine.num_io_tensors
+    else:
+        num_io_tensors = get_bindings_per_profile(engine)
+
     engine_str = f"Name: {engine.name} | {'Refittable ' if engine.refittable else ''}{'Implicit' if hasattr(engine, 'has_implicit_batch_dimension') and engine.has_implicit_batch_dimension else 'Explicit'} Batch Engine\n"
     engine_str += "\n"
 
     # Show metadata for the first profile (i.e. the dynamic shapes)
-    input_metadata = get_input_metadata_from_engine(engine, 0, bindings_per_profile)
+    if _should_use_v3_api():
+        input_metadata = get_metadata_from_engine(engine, mode=trt.TensorIOMode.INPUT)
+        output_metadata = get_metadata_from_engine(engine, mode=trt.TensorIOMode.OUTPUT)
+    else:
+        input_metadata = get_input_metadata_from_engine(engine, 0, num_io_tensors)
+        output_metadata = get_output_metadata_from_engine(engine, 0, num_io_tensors)
+
     engine_str += f"---- {len(input_metadata)} Engine Input(s) ----\n{input_metadata}\n\n"
-    output_metadata = get_output_metadata_from_engine(engine, 0, bindings_per_profile)
     engine_str += f"---- {len(output_metadata)} Engine Output(s) ----\n{output_metadata}\n\n"
 
     engine_str += f"---- Memory ----\nDevice Memory: {engine.device_memory_size} bytes\n\n"
 
-    engine_str += f"---- {engine.num_optimization_profiles} Profile(s) ({bindings_per_profile} Binding(s) Each) ----\n"
+    engine_str += f"---- {engine.num_optimization_profiles} Profile(s) ({num_io_tensors} Tensor(s) Each) ----\n"
     for profile_index in range(engine.num_optimization_profiles):
         engine_str += f"- Profile: {profile_index}\n"
 
-        max_width = max([len(binding) for binding in engine]) + 8
-        for offset in range(bindings_per_profile):
-            binding = profile_index * bindings_per_profile + offset
-            name = f"[Name: {engine.get_binding_name(binding)}]"
-            binding_type = "(Input) " if engine.binding_is_input(binding) else "(Output)"
-            engine_str += util.indent_block(f"Binding Index: {binding} {binding_type} {name:<{max_width}}")
+        if _should_use_v3_api():
+            max_width = max([len(engine.get_tensor_name(idx)) for idx in range(engine.num_io_tensors)]) + 8
+        else:
+            max_width = max([len(binding) for binding in engine]) + 8
 
-            if engine.binding_is_input(binding):
-                if engine.is_shape_binding(binding):
-                    min_shape, opt_shape, max_shape = engine.get_profile_shape_input(profile_index, binding)
+        for idx in range(num_io_tensors):
+            if _should_use_v3_api():
+                name = engine.get_tensor_name(idx)
+                binding_type = " (Input)" if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else "(Output)"
+                engine_str += util.indent_block(f"Tensor: {name:<{max_width}} {binding_type}, Index: {idx}")
+
+                if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
+                    min_shape, opt_shape, max_shape = engine.get_tensor_profile_shape(name, profile_index)
+                    engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
                 else:
-                    min_shape, opt_shape, max_shape = engine.get_profile_shape(profile_index, binding)
-                engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
+                    engine_str += f" | Shape: {engine.get_tensor_shape(name)}\n"
             else:
-                engine_str += f" | Shape: {engine.get_binding_shape(binding)}\n"
+                binding = profile_index * num_io_tensors + idx
+                name = f"[Name: {engine.get_binding_name(binding)}]"
+                binding_type = "(Input) " if engine.binding_is_input(binding) else "(Output)"
+                engine_str += util.indent_block(f"Binding Index: {binding} {binding_type} {name:<{max_width}}")
+
+                if engine.binding_is_input(binding):
+                    if engine.is_shape_binding(binding):
+                        min_shape, opt_shape, max_shape = engine.get_profile_shape_input(profile_index, binding)
+                    else:
+                        min_shape, opt_shape, max_shape = engine.get_profile_shape(profile_index, binding)
+                    engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
+                else:
+                    engine_str += f" | Shape: {engine.get_binding_shape(binding)}\n"
         engine_str += "\n"
 
     layers_per_profile = engine.num_layers // engine.num_optimization_profiles
@@ -677,7 +700,46 @@ def str_from_engine(engine, show_layers=None, show_attrs=None):
     return util.indent_block(engine_str, level=0)
 
 
+# V2 APIs
+def add_binding_to_metadata(engine, binding, metadata, name_binding):
+    if _should_use_v3_api():
+        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+
+    # name_binding always comes from profile 0, since that's where we
+    # get all binding names in the runner
+    metadata.add(
+        name=engine[name_binding],
+        dtype=np_dtype_from_trt(engine.get_binding_dtype(binding)),
+        shape=list(engine.get_binding_shape(binding)),
+    )
+
+
+def get_input_metadata_from_engine(engine, start_binding, end_binding):
+    if _should_use_v3_api():
+        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+
+    inputs = TensorMetadata()
+    for index, binding in enumerate(range(start_binding, end_binding)):
+        if engine.binding_is_input(binding):
+            add_binding_to_metadata(engine, binding, inputs, name_binding=index)
+    return inputs
+
+
+def get_output_metadata_from_engine(engine, start_binding, end_binding):
+    if _should_use_v3_api():
+        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+
+    outputs = TensorMetadata()
+    for index, binding in enumerate(range(start_binding, end_binding)):
+        if not engine.binding_is_input(binding):
+            add_binding_to_metadata(engine, binding, outputs, name_binding=index)
+    return outputs
+
+
 def get_bindings_per_profile(engine):
+    if _should_use_v3_api():
+        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+
     return engine.num_bindings // engine.num_optimization_profiles
 
 
@@ -692,7 +754,15 @@ def get_active_profile_bindings(context):
     Returns:
         Tuple[int, int]: The start and end bindings indices, in that order
     """
+    if _should_use_v3_api():
+        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+
     active_profile = context.active_optimization_profile
+    if active_profile < 0:
+        G_LOGGER.critical(
+            f"Cannot determine profile bindings since the optimization profile for this context is set to: {active_profile}"
+        )
+
     bindings_per_profile = get_bindings_per_profile(context.engine)
 
     start_binding = bindings_per_profile * active_profile

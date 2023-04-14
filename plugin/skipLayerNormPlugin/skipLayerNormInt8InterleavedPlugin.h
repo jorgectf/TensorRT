@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION &
+ * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,79 +25,99 @@
 #include <string>
 #include <vector>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
+
+int32_t launch_small_hface(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale);
+
+int32_t launch_large_hface(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale);
+
+int32_t launch_small_mtron(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, int8_t* preln, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale, float const qSkipScale);
+
+int32_t launch_large_mtron(cudaStream_t stream, int32_t const ld, int32_t const total, int8_t const* input,
+    int8_t const* skip, half const* beta, half const* gamma, int8_t* output, int8_t* preln, float const dqScaleIn,
+    float const dqScaleSkip, float const qScale, float const qSkipScale);
 
 class SkipLayerNormInterleavedPluginBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     SkipLayerNormInterleavedPluginBase(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginBase(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginBase(std::string const& name, void const* data, size_t length);
 
-    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
-    // delete default constructor.
+    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without
+    // arguments, so we delete default constructor.
     SkipLayerNormInterleavedPluginBase() = delete;
 
     // IPluginV2DynamicExt Methods
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, const nvinfer1::DimsExprs* inputs, int32_t nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int32_t nbInputs,
-        const nvinfer1::DynamicPluginTensorDesc* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(const nvinfer1::PluginTensorDesc* inputs, int32_t nbInputs,
-        const nvinfer1::PluginTensorDesc* outputs, int32_t nbOutputs) const noexcept override;
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
 
     // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes, int32_t nbInputs) const
-        noexcept override;
+    nvinfer1::DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2 Methods
-    const char* getPluginType() const noexcept override;
+    char const* getPluginType() const noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
     void destroy() noexcept override;
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
-    const char* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 protected:
-    const std::string mLayerName;
+    std::string const& mLayerName;
     std::string mNamespace;
 
     bert::cuda_unique_ptr<void> mGammaDev;
     bert::cuda_unique_ptr<void> mBetaDev;
-    size_t mLd; // leading dim
+    size_t mLd{}; // leading dim
     bert::WeightsWithOwnership mGamma;
     bert::WeightsWithOwnership mBeta;
 
-    size_t mParamWordsize;
-    bool mParamsOnDevice;
+    size_t mParamWordsize{};
+    bool mParamsOnDevice{};
 };
 
 class SkipLayerNormInterleavedPluginHFace : public SkipLayerNormInterleavedPluginBase
 {
 public:
     SkipLayerNormInterleavedPluginHFace(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginHFace(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginHFace(std::string const& name, void const* data, size_t length);
 
-    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
-    // delete default constructor.
+    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without
+    // arguments, so we delete default constructor.
     SkipLayerNormInterleavedPluginHFace() = delete;
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2 Methods
     int32_t initialize() noexcept override;
     void terminate() noexcept override;
     void destroy() noexcept override;
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
 };
 
@@ -105,24 +125,24 @@ class SkipLayerNormInterleavedPluginMTron : public SkipLayerNormInterleavedPlugi
 {
 public:
     SkipLayerNormInterleavedPluginMTron(
-        const std::string name, const nvinfer1::Weights& beta, const nvinfer1::Weights& gamma);
+        std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
-    SkipLayerNormInterleavedPluginMTron(const std::string name, const void* data, size_t length);
+    SkipLayerNormInterleavedPluginMTron(std::string const& name, void const* data, size_t length);
 
-    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without arguments, so we
-    // delete default constructor.
+    // It doesn't make sense to make SkipLayerNormInterleavedPlugin without
+    // arguments, so we delete default constructor.
     SkipLayerNormInterleavedPluginMTron() = delete;
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    int32_t enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-        const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2 Methods
     int32_t initialize() noexcept override;
     void terminate() noexcept override;
     void destroy() noexcept override;
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
     int32_t getNbOutputs() const noexcept override;
 };
 
@@ -131,13 +151,13 @@ class SkipLayerNormInterleavedPluginBaseCreator : public nvinfer1::IPluginCreato
 public:
     SkipLayerNormInterleavedPluginBaseCreator();
 
-    const char* getPluginName() const noexcept override;
+    char const* getPluginName() const noexcept override;
 
-    const nvinfer1::PluginFieldCollection* getFieldNames() noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    void setPluginNamespace(const char* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
-    const char* getPluginNamespace() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static nvinfer1::PluginFieldCollection mFC;
@@ -150,11 +170,11 @@ class SkipLayerNormInterleavedPluginHFaceCreator : public SkipLayerNormInterleav
 public:
     SkipLayerNormInterleavedPluginHFaceCreator();
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
     nvinfer1::IPluginV2* deserializePlugin(
-        const char* name, const void* serialData, size_t serialLength) noexcept override;
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 };
 
 class SkipLayerNormInterleavedPluginMTronCreator : public SkipLayerNormInterleavedPluginBaseCreator
@@ -162,12 +182,14 @@ class SkipLayerNormInterleavedPluginMTronCreator : public SkipLayerNormInterleav
 public:
     SkipLayerNormInterleavedPluginMTronCreator();
 
-    const char* getPluginVersion() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(const char* name, const nvinfer1::PluginFieldCollection* fc) noexcept override;
+    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
     nvinfer1::IPluginV2* deserializePlugin(
-        const char* name, const void* serialData, size_t serialLength) noexcept override;
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
 };
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // TRT_SKIP_LAYER_NORM_INTERLEAVED_PLUGIN_H

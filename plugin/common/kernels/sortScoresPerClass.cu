@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +16,13 @@
  */
 #include "common/bboxUtils.h"
 #include "common/cub_helper.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cub/cub.cuh"
 #include <array>
-
-using namespace nvinfer1;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 inline __device__ __half add_fb(const __half& a, const __half& b)
 {
@@ -291,3 +293,5 @@ size_t sortScoresPerClassWorkspaceSize(
 
     return calculateTotalWorkspaceSize(wss, 4);
 }
+} // namespace plugin
+} // namespace nvinfer1

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +19,10 @@
 #include "cuda_fp16.h"
 #include <algorithm>
 
-using namespace nvinfer1;
-using namespace nvinfer1::plugin;
+namespace nvinfer1
+{
+namespace plugin
+{
 
 size_t detectionForwardBBoxDataSize(int N, int C1, DataType DT_BBOX)
 {
@@ -63,3 +65,5 @@ size_t detectionForwardPostNMSSize(int N, int numClasses, int topK)
     PLUGIN_ASSERT(sizeof(float) == sizeof(int));
     return N * numClasses * topK * sizeof(float);
 }
+} // namespace plugin
+} // namespace nvinfer1

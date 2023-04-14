@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,10 @@
 #include <cuda_runtime_api.h>
 #include <cuda_fp16.h>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 const int PILLARS_PER_BLOCK = 64;
 const int PILLAR_FEATURE_SIZE = 64;
 
@@ -106,3 +110,5 @@ template int pillarScatterKernelLaunch<float>(
   unsigned int featureX, unsigned int featureY,
   float *spatial_feature_data,
   cudaStream_t stream);
+} // namespace plugin
+} // namespace nvinfer1

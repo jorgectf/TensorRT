@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -99,6 +99,11 @@ int clipInference(
         break;
     }
     case nvinfer1::DataType::kBOOL:
+    {
+        PLUGIN_FAIL("unsupported datatype");
+        break;
+    }
+    case nvinfer1::DataType::kFP8:
     {
         PLUGIN_FAIL("unsupported datatype");
         break;

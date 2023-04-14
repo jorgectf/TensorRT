@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,12 +29,13 @@ void validateRequiredAttributesExist(std::set<std::string> requiredFieldNames, P
     }
     if (!requiredFieldNames.empty())
     {
-        std::stringstream msg{"PluginFieldCollection missing required fields: {"};
-        char const* seperator = "";
+        std::stringstream msg{};
+        msg << "PluginFieldCollection missing required fields: {";
+        char const* separator = "";
         for (auto const& field : requiredFieldNames)
         {
-            msg << seperator << field;
-            seperator = ", ";
+            msg << separator << field;
+            separator = ", ";
         }
         msg << "}";
         std::string msg_str = msg.str();

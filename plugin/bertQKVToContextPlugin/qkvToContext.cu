@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,8 +30,16 @@
 #include "bertQKVToContextPlugin/fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
 using namespace nvinfer1;
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
+inline uint32_t asUInt32(float const& val)
+{
+    return *reinterpret_cast<uint32_t const*>(reinterpret_cast<void const*>(&val));
+}
 
 template <typename T, int TPB, int VPT>
 __global__ void maskedSoftmax(const float rsqrtHeadSize, const T* input, T* output, const int* maskIdx)
@@ -830,9 +838,9 @@ public:
         float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
         float scaleSoftmax = 1.f / mDqProbs;
 
-        params.scale_bmm1 = reinterpret_cast<const uint32_t&>(scaleBmm1);
-        params.scale_bmm2 = reinterpret_cast<const uint32_t&>(scaleBmm2);
-        params.scale_softmax = reinterpret_cast<const uint32_t&>(scaleSoftmax);
+        params.scale_bmm1 = asUInt32(scaleBmm1);
+        params.scale_bmm2 = asUInt32(scaleBmm2);
+        params.scale_softmax = asUInt32(scaleSoftmax);
 
         params.enable_i2f_trick = -double(1 << 22) * double(scaleBmm2) <= -128.f
             && double(1 << 22) * double(scaleBmm2) >= 127.f;
@@ -936,26 +944,37 @@ public:
         size_t warps_m{1U};
         size_t warps_n{1U};
         size_t warps_k{1U};
-        if (S == 64 || S == 96 || S == 128)
-        {
-            warps_m = 2;
-            warps_n = 2;
-        }
-        else if (S == 256 || S == 192)
-        {
-            warps_m = 1;
-            warps_n = 4;
-        }
-        else if (S == 384 || S == 512)
-        {
-            warps_m = 1;
-            warps_n = 8;
-        }
 
+        // [MLPINF-1894] HGMMA has a different warp group.
+        // TODO: add S==64/96/512 HGMMA support for sm==90
+        if (sm == kSM_90 && (S == 128 || S == 256 || S == 384))
+        {
+            warps_m = 4;
+            warps_n = 1;
+        }
         else
         {
-            assert(false && "Unsupporte seqlen");
+            if (S == 64 || S == 96 || S == 128)
+            {
+                warps_m = 2;
+                warps_n = 2;
+            }
+            else if (S == 256 || S == 192)
+            {
+                warps_m = 1;
+                warps_n = 4;
+            }
+            else if (S == 384 || S == 512)
+            {
+                warps_m = 1;
+                warps_n = 8;
+            }
+            else
+            {
+                assert(false && "Unsupporte seqlen");
+            }
         }
+
         // The number of threads per CTA.
         threads_per_cta = warps_m * warps_n * warps_k * 32;
         // The number of xmmas in the M dimension. We use one uint32_t per XMMA in the M dimension.
@@ -1094,26 +1113,45 @@ public:
         size_t warps_m{1U};
         size_t warps_n{1U};
         size_t warps_k{1U};
-        if (S == 128)
-        {
-            warps_m = 2;
-            warps_n = 2;
-        }
-        else if (S == 256 || S == 192)
-        {
-            warps_m = 1;
-            warps_n = 4;
-        }
-        else if (S == 384 || S == 512)
-        {
-            warps_m = 1;
-            warps_n = 8;
-        }
 
+        // [MLPINF-1894] IGMMA has a different warp group.
+        // TODO: add S==64/96 IGMMA support for sm==90
+        if (sm == kSM_90 && (S == 128 || S == 192 || S == 256 || S == 384 || S == 512))
+        {
+            if (S == 512)
+            {
+                warps_m = 4;
+                warps_n = 2;
+            }
+            else
+            {
+                warps_m = 4;
+                warps_n = 1;
+            }
+        }
         else
         {
-            assert(false && "Unsupported seqlen.");
+            if (S == 128)
+            {
+                warps_m = 2;
+                warps_n = 2;
+            }
+            else if (S == 256 || S == 192)
+            {
+                warps_m = 1;
+                warps_n = 4;
+            }
+            else if (S == 384 || S == 512)
+            {
+                warps_m = 1;
+                warps_n = 8;
+            }
+            else
+            {
+                assert(false && "Unsupported seqlen.");
+            }
         }
+
         // The number of threads per CTA.
         threads_per_cta = warps_m * warps_n * warps_k * 32;
         // The number of xmmas in the M dimension. We use one uint32_t per XMMA in the M dimension.
@@ -1141,9 +1179,9 @@ public:
         float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
         float scaleSoftmax = 1.f / mDqProbs;
 
-        params.scale_bmm1 = reinterpret_cast<const uint32_t&>(scaleBmm1);
-        params.scale_bmm2 = reinterpret_cast<const uint32_t&>(scaleBmm2);
-        params.scale_softmax = reinterpret_cast<const uint32_t&>(scaleSoftmax);
+        params.scale_bmm1 = asUInt32(scaleBmm1);
+        params.scale_bmm2 = asUInt32(scaleBmm2);
+        params.scale_softmax = asUInt32(scaleSoftmax);
 
         params.enable_i2f_trick
             = -double(1 << 22) * double(scaleBmm2) <= -128.f && double(1 << 22) * double(scaleBmm2) >= 127.f;
@@ -1224,3 +1262,5 @@ bool FusedMHARunnerInt8v2::isValid(int s) const
 }
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1

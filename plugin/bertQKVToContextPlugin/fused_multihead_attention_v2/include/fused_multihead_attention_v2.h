@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,10 @@
 #include "common/bertCommon.h"
 #include <cstdint>
 
+namespace nvinfer1
+{
+namespace plugin
+{
 namespace bert
 {
 struct Fused_multihead_attention_params_v2
@@ -96,38 +100,45 @@ struct Fused_multihead_attention_params_v2
     }
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm86_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm86_cubin[];
+#if defined(ENABLE_SM72)
 extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin[];
-extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin[];
+#endif // defined(ENABLE_SM72)
 
+#if defined(ENABLE_SM75)
+extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm75_cubin[];
+extern unsigned char cubin_fmha_v2_int8_512_64_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_512_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_256_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_128_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_64_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_512_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_256_32_sm75_cu_cubin[];
+extern unsigned char cubin_fmha_v2_fp16_128_32_sm75_cu_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm75_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin[];
+#endif // defined(ENABLE_SM75)
+
+#if defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
+extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm80_cubin[];
+extern unsigned char cubin_fmha_v2_int8_64_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_int8_96_64_sm80_cu_cubin[];
+extern unsigned char cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_512_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_512_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_256_32_sm80_cu_cubin[];
@@ -137,15 +148,23 @@ extern unsigned char cubin_fmha_v2_fp16_512_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_512_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_256_32_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_128_32_sm80_cu_cubin[];
-extern unsigned char cubin_fmha_v2_int8_512_64_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_int8_512_32_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_int8_256_32_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_int8_128_32_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_fp16_512_64_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_fp16_512_32_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_fp16_256_32_sm75_cu_cubin[];
-extern unsigned char cubin_fmha_v2_fp16_128_32_sm75_cu_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm80_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin[];
+#endif // defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
+#if defined(ENABLE_SM86)
+extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_64_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_fp16_96_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin[];
+extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin[];
+#endif // defined(ENABLE_SM86)
+
+#if defined(ENABLE_SM87)
 extern unsigned char cubin_fmha_v2_int8_384_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v2_il_int8_384_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_256_64_sm87_cu_cubin[];
@@ -163,7 +182,9 @@ extern unsigned char cubin_fmha_v2_fp16_256_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_128_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_96_64_sm87_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_64_64_sm87_cu_cubin[];
+#endif // defined(ENABLE_SM87)
 
+#if defined(ENABLE_SM90)
 extern unsigned char cubin_fmha_v2_int8_512_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_int8_384_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin[];
@@ -183,39 +204,48 @@ extern unsigned char cubin_fmha_v2_fp16_256_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_128_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_96_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_64_64_sm90_cu_cubin[];
+#endif // defined(ENABLE_SM90)
 
-extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm86_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm86_cubin_len;
+#if defined(ENABLE_SM72)
 extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len;
-extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len;
+#endif // defined(ENABLE_SM72)
 
+#if defined(ENABLE_SM75)
+extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm75_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm75_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_512_64_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_512_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_256_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_128_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_64_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_512_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_256_32_sm75_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_fp16_128_32_sm75_cu_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm75_cubin_len;
+#endif // defined(ENABLE_SM75)
+
+#if defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
+extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm80_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm80_cubin_len;
+extern uint32_t cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_96_64_sm80_cu_cubin_len;
+extern uint32_t cubin_fmha_v2_int8_64_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_512_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_512_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_256_32_sm80_cu_cubin_len;
@@ -225,15 +255,22 @@ extern uint32_t cubin_fmha_v2_fp16_512_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_512_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_256_32_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_128_32_sm80_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_int8_512_64_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_int8_512_32_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_int8_256_32_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_int8_128_32_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_fp16_512_64_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_fp16_512_32_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_fp16_256_32_sm75_cu_cubin_len;
-extern uint32_t cubin_fmha_v2_fp16_128_32_sm75_cu_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len;
+#endif // defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
+#if defined(ENABLE_SM86)
+extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_64_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_fp16_96_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin_len;
+extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len;
+#endif // defined(ENABLE_SM86)
+
+#if defined(ENABLE_SM87)
 extern uint32_t cubin_fmha_v2_int8_384_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_il_int8_384_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_256_64_sm87_cu_cubin_len;
@@ -251,7 +288,9 @@ extern uint32_t cubin_fmha_v2_fp16_256_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_128_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_96_64_sm87_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_64_64_sm87_cu_cubin_len;
+#endif // defined(ENABLE_SM87)
 
+#if defined(ENABLE_SM90)
 extern uint32_t cubin_fmha_v2_int8_512_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_int8_384_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin_len;
@@ -271,6 +310,7 @@ extern uint32_t cubin_fmha_v2_fp16_256_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_128_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_96_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len;
+#endif // defined(ENABLE_SM90)
 
 #if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
 #error This file can only be included one of sm 72, 75, 80, 86, 87, 89, or 90 are defined.
@@ -505,6 +545,15 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         fused_multihead_attention_v2_fp16_384_64_kernel_sm80_cubin_len,
         "fused_multihead_attention_v2_fp16_384_64_kernel_sm80", 114688, 256, 0, false},
 
+    {DATA_TYPE_INT8, 64, 64, kSM_80, cubin_fmha_v2_int8_64_64_sm80_cu_cubin, cubin_fmha_v2_int8_64_64_sm80_cu_cubin_len,
+        "fmha_v2_int8_64_64_sm80_kernel", 24576, 128, 0, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_80, cubin_fmha_v2_int8_96_64_sm80_cu_cubin, cubin_fmha_v2_int8_96_64_sm80_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm80_kernel", 28672, 128, 0, false},
+    {DATA_TYPE_INT8, 64, 64, kSM_80, cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin,
+        cubin_fmha_v2_il_int8_64_64_sm80_cu_cubin_len, "fmha_v2_il_int8_64_64_sm80_kernel", 20480, 128, 0, true},
+    {DATA_TYPE_INT8, 96, 64, kSM_80, cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin,
+        cubin_fmha_v2_il_int8_96_64_sm80_cu_cubin_len, "fmha_v2_il_int8_96_64_sm80_kernel", 22528, 128, 0, true},
+
     {DATA_TYPE_INT8, 128, 64, kSM_80, fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin,
         fused_multihead_attention_v2_int8_128_64_kernel_sm80_cubin_len,
         "fused_multihead_attention_v2_int8_128_64_kernel_sm80_interleaved_noloop", 20480, 128, 16, true},
@@ -667,16 +716,16 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         cubin_fmha_v2_il_int8_128_64_sm87_cu_cubin_len, "fmha_v2_il_int8_128_64_sm87_kernel", 24576, 128, 0, true},
     {DATA_TYPE_INT8, 128, 64, kSM_87, cubin_fmha_v2_il_int8_128_64_sm87_cu_cubin,
         cubin_fmha_v2_il_int8_128_64_sm87_cu_cubin_len, "fmha_v2_il_int8_128_64_sm87_kernel_nl", 18432, 128, 16, true},
-    {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_int8_96_64_sm87_cu_cubin,
-        cubin_fmha_v2_int8_96_64_sm87_cu_cubin_len, "fmha_v2_int8_96_64_sm87_kernel", 28672, 128, 0, false},
-    {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_int8_96_64_sm87_cu_cubin,
-        cubin_fmha_v2_int8_96_64_sm87_cu_cubin_len, "fmha_v2_int8_96_64_sm87_kernel_nl", 20480, 128, 16, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_int8_96_64_sm87_cu_cubin, cubin_fmha_v2_int8_96_64_sm87_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm87_kernel", 28672, 128, 0, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_int8_96_64_sm87_cu_cubin, cubin_fmha_v2_int8_96_64_sm87_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm87_kernel_nl", 20480, 128, 16, false},
     {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_il_int8_96_64_sm87_cu_cubin,
         cubin_fmha_v2_il_int8_96_64_sm87_cu_cubin_len, "fmha_v2_il_int8_96_64_sm87_kernel", 22528, 128, 0, true},
     {DATA_TYPE_INT8, 96, 64, kSM_87, cubin_fmha_v2_il_int8_96_64_sm87_cu_cubin,
         cubin_fmha_v2_il_int8_96_64_sm87_cu_cubin_len, "fmha_v2_il_int8_96_64_sm87_kernel_nl", 18432, 128, 16, true},
-    {DATA_TYPE_INT8, 64, 64, kSM_87, cubin_fmha_v2_int8_64_64_sm87_cu_cubin,
-        cubin_fmha_v2_int8_64_64_sm87_cu_cubin_len, "fmha_v2_int8_64_64_sm87_kernel", 24576, 128, 0, false},
+    {DATA_TYPE_INT8, 64, 64, kSM_87, cubin_fmha_v2_int8_64_64_sm87_cu_cubin, cubin_fmha_v2_int8_64_64_sm87_cu_cubin_len,
+        "fmha_v2_int8_64_64_sm87_kernel", 24576, 128, 0, false},
     {DATA_TYPE_INT8, 64, 64, kSM_87, cubin_fmha_v2_il_int8_64_64_sm87_cu_cubin,
         cubin_fmha_v2_il_int8_64_64_sm87_cu_cubin_len, "fmha_v2_il_int8_64_64_sm87_kernel", 20480, 128, 0, true},
     {DATA_TYPE_FP16, 384, 64, kSM_87, cubin_fmha_v2_fp16_384_64_sm87_cu_cubin,
@@ -702,51 +751,56 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
 #if defined(ENABLE_SM90)
     // GH100 hopper
     {DATA_TYPE_INT8, 512, 64, kSM_90, cubin_fmha_v2_int8_512_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_512_64_sm90_cu_cubin_len, "fmha_v2_int8_512_64_sm90_kernel", 73728, 256, 0, false},
+        cubin_fmha_v2_int8_512_64_sm90_cu_cubin_len, "fmha_v2_int8_512_64_ldgsts_sm90_kernel", 108032, 256, 0, false},
     {DATA_TYPE_INT8, 512, 64, kSM_90, cubin_fmha_v2_int8_512_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_512_64_sm90_cu_cubin_len, "fmha_v2_int8_512_64_sm90_kernel_nl", 73728, 256, 32, false},
+        cubin_fmha_v2_int8_512_64_sm90_cu_cubin_len, "fmha_v2_int8_512_64_ldgsts_sm90_kernel_nl", 108032, 256, 64,
+        false},
     {DATA_TYPE_INT8, 384, 64, kSM_90, cubin_fmha_v2_int8_384_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_384_64_sm90_cu_cubin_len, "fmha_v2_int8_384_64_sm90_kernel", 53248, 128, 0, false},
+        cubin_fmha_v2_int8_384_64_sm90_cu_cubin_len, "fmha_v2_int8_384_64_ldgsts_sm90_kernel", 58368, 128, 0, false},
     {DATA_TYPE_INT8, 384, 64, kSM_90, cubin_fmha_v2_int8_384_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_384_64_sm90_cu_cubin_len, "fmha_v2_int8_384_64_sm90_kernel_nl", 53248, 128, 32, false},
+        cubin_fmha_v2_int8_384_64_sm90_cu_cubin_len, "fmha_v2_int8_384_64_ldgsts_sm90_kernel_nl", 58368, 128, 64,
+        false},
     {DATA_TYPE_INT8, 384, 64, kSM_90, cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin_len, "fmha_v2_il_int8_384_64_sm90_kernel", 51200, 128, 0, true},
     {DATA_TYPE_INT8, 384, 64, kSM_90, cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_384_64_sm90_cu_cubin_len, "fmha_v2_il_int8_384_64_sm90_kernel_nl", 51200, 128, 32, true},
     {DATA_TYPE_INT8, 256, 64, kSM_90, cubin_fmha_v2_int8_256_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_256_64_sm90_cu_cubin_len, "fmha_v2_int8_256_64_sm90_kernel", 36864, 128, 0, false},
+        cubin_fmha_v2_int8_256_64_sm90_cu_cubin_len, "fmha_v2_int8_256_64_ldgsts_sm90_kernel", 41984, 128, 0, false},
     {DATA_TYPE_INT8, 256, 64, kSM_90, cubin_fmha_v2_int8_256_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_256_64_sm90_cu_cubin_len, "fmha_v2_int8_256_64_sm90_kernel_nl", 36864, 128, 32, false},
+        cubin_fmha_v2_int8_256_64_sm90_cu_cubin_len, "fmha_v2_int8_256_64_ldgsts_sm90_kernel_nl", 41984, 128, 64,
+        false},
     {DATA_TYPE_INT8, 256, 64, kSM_90, cubin_fmha_v2_il_int8_256_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_256_64_sm90_cu_cubin_len, "fmha_v2_il_int8_256_64_sm90_kernel", 34816, 128, 0, true},
     {DATA_TYPE_INT8, 256, 64, kSM_90, cubin_fmha_v2_il_int8_256_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_256_64_sm90_cu_cubin_len, "fmha_v2_il_int8_256_64_sm90_kernel_nl", 34816, 128, 32, true},
     {DATA_TYPE_INT8, 192, 64, kSM_90, cubin_fmha_v2_int8_192_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_192_64_sm90_cu_cubin_len, "fmha_v2_int8_192_64_sm90_kernel", 36864, 128, 0, false},
+        cubin_fmha_v2_int8_192_64_sm90_cu_cubin_len, "fmha_v2_int8_192_64_ldgsts_sm90_kernel", 33792, 128, 0, false},
     {DATA_TYPE_INT8, 192, 64, kSM_90, cubin_fmha_v2_int8_192_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_192_64_sm90_cu_cubin_len, "fmha_v2_int8_192_64_sm90_kernel_nl", 36864, 128, 32, false},
+        cubin_fmha_v2_int8_192_64_sm90_cu_cubin_len, "fmha_v2_int8_192_64_ldgsts_sm90_kernel_nl", 33792, 128, 64,
+        false},
     {DATA_TYPE_INT8, 192, 64, kSM_90, cubin_fmha_v2_il_int8_192_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_192_64_sm90_cu_cubin_len, "fmha_v2_il_int8_192_64_sm90_kernel", 26624, 128, 0, true},
     {DATA_TYPE_INT8, 192, 64, kSM_90, cubin_fmha_v2_il_int8_192_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_192_64_sm90_cu_cubin_len, "fmha_v2_il_int8_192_64_sm90_kernel_nl", 26624, 128, 32, true},
     {DATA_TYPE_INT8, 128, 64, kSM_90, cubin_fmha_v2_int8_128_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_128_64_sm90_cu_cubin_len, "fmha_v2_int8_128_64_sm90_kernel", 32768, 128, 0, false},
+        cubin_fmha_v2_int8_128_64_sm90_cu_cubin_len, "fmha_v2_int8_128_64_ldgsts_sm90_kernel", 25600, 128, 0, false},
     {DATA_TYPE_INT8, 128, 64, kSM_90, cubin_fmha_v2_int8_128_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_128_64_sm90_cu_cubin_len, "fmha_v2_int8_128_64_sm90_kernel_nl", 20480, 128, 16, false},
+        cubin_fmha_v2_int8_128_64_sm90_cu_cubin_len, "fmha_v2_int8_128_64_ldgsts_sm90_kernel_nl", 25600, 128, 64,
+        false},
     {DATA_TYPE_INT8, 128, 64, kSM_90, cubin_fmha_v2_il_int8_128_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_128_64_sm90_cu_cubin_len, "fmha_v2_il_int8_128_64_sm90_kernel", 24576, 128, 0, true},
     {DATA_TYPE_INT8, 128, 64, kSM_90, cubin_fmha_v2_il_int8_128_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_128_64_sm90_cu_cubin_len, "fmha_v2_il_int8_128_64_sm90_kernel_nl", 18432, 128, 16, true},
-    {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_int8_96_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_96_64_sm90_cu_cubin_len, "fmha_v2_int8_96_64_sm90_kernel", 28672, 128, 0, false},
-    {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_int8_96_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_96_64_sm90_cu_cubin_len, "fmha_v2_int8_96_64_sm90_kernel_nl", 20480, 128, 16, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_int8_96_64_sm90_cu_cubin, cubin_fmha_v2_int8_96_64_sm90_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm90_kernel", 28672, 128, 0, false},
+    {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_int8_96_64_sm90_cu_cubin, cubin_fmha_v2_int8_96_64_sm90_cu_cubin_len,
+        "fmha_v2_int8_96_64_sm90_kernel_nl", 20480, 128, 16, false},
     {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_il_int8_96_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_96_64_sm90_cu_cubin_len, "fmha_v2_il_int8_96_64_sm90_kernel", 22528, 128, 0, true},
     {DATA_TYPE_INT8, 96, 64, kSM_90, cubin_fmha_v2_il_int8_96_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_96_64_sm90_cu_cubin_len, "fmha_v2_il_int8_96_64_sm90_kernel_nl", 18432, 128, 16, true},
-    {DATA_TYPE_INT8, 64, 64, kSM_90, cubin_fmha_v2_int8_64_64_sm90_cu_cubin,
-        cubin_fmha_v2_int8_64_64_sm90_cu_cubin_len, "fmha_v2_int8_64_64_sm90_kernel", 40960, 128, 0, false},
+    {DATA_TYPE_INT8, 64, 64, kSM_90, cubin_fmha_v2_int8_64_64_sm90_cu_cubin, cubin_fmha_v2_int8_64_64_sm90_cu_cubin_len,
+        "fmha_v2_int8_64_64_sm90_kernel", 40960, 128, 0, false},
     {DATA_TYPE_INT8, 64, 64, kSM_90, cubin_fmha_v2_il_int8_64_64_sm90_cu_cubin,
         cubin_fmha_v2_il_int8_64_64_sm90_cu_cubin_len, "fmha_v2_il_int8_64_64_sm90_kernel", 20480, 128, 0, true},
     {DATA_TYPE_FP16, 512, 64, kSM_90, cubin_fmha_v2_fp16_512_64_sm90_cu_cubin,
@@ -754,23 +808,26 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
     {DATA_TYPE_FP16, 512, 64, kSM_90, cubin_fmha_v2_fp16_512_64_sm90_cu_cubin,
         cubin_fmha_v2_fp16_512_64_sm90_cu_cubin_len, "fmha_v2_fp16_512_64_sm90_kernel_nl", 73728, 256, 32, false},
     {DATA_TYPE_FP16, 384, 64, kSM_90, cubin_fmha_v2_fp16_384_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_384_64_sm90_cu_cubin_len, "fmha_v2_fp16_384_64_sm90_kernel", 65536, 256, 0, false},
+        cubin_fmha_v2_fp16_384_64_sm90_cu_cubin_len, "fmha_v2_fp16_384_64_ldgsts_sm90_kernel", 115712, 128, 0, false},
     {DATA_TYPE_FP16, 384, 64, kSM_90, cubin_fmha_v2_fp16_384_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_384_64_sm90_cu_cubin_len, "fmha_v2_fp16_384_64_sm90_kernel_nl", 57344, 256, 32, false},
+        cubin_fmha_v2_fp16_384_64_sm90_cu_cubin_len, "fmha_v2_fp16_384_64_ldgsts_sm90_kernel_nl", 115712, 128, 64,
+        false},
     {DATA_TYPE_FP16, 256, 64, kSM_90, cubin_fmha_v2_fp16_256_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_256_64_sm90_cu_cubin_len, "fmha_v2_fp16_256_64_sm90_kernel", 40960, 128, 0, false},
+        cubin_fmha_v2_fp16_256_64_sm90_cu_cubin_len, "fmha_v2_fp16_256_64_ldgsts_sm90_kernel", 82944, 128, 0, false},
     {DATA_TYPE_FP16, 256, 64, kSM_90, cubin_fmha_v2_fp16_256_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_256_64_sm90_cu_cubin_len, "fmha_v2_fp16_256_64_sm90_kernel_nl", 40960, 128, 32, false},
+        cubin_fmha_v2_fp16_256_64_sm90_cu_cubin_len, "fmha_v2_fp16_256_64_ldgsts_sm90_kernel_nl", 82944, 128, 64,
+        false},
     {DATA_TYPE_FP16, 128, 64, kSM_90, cubin_fmha_v2_fp16_128_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_128_64_sm90_cu_cubin_len, "fmha_v2_fp16_128_64_sm90_kernel", 65536, 128, 0, false},
+        cubin_fmha_v2_fp16_128_64_sm90_cu_cubin_len, "fmha_v2_fp16_128_64_ldgsts_sm90_kernel", 50176, 128, 0, false},
     {DATA_TYPE_FP16, 128, 64, kSM_90, cubin_fmha_v2_fp16_128_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_128_64_sm90_cu_cubin_len, "fmha_v2_fp16_128_64_sm90_kernel_nl", 36864, 128, 16, false},
-    {DATA_TYPE_FP16, 96, 64, kSM_90, cubin_fmha_v2_fp16_96_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_96_64_sm90_cu_cubin_len, "fmha_v2_fp16_96_64_sm90_kernel", 49152, 128, 0, false},
-    {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len, "fmha_v2_fp16_64_64_sm90_kernel", 32768, 128, 0, false},
-    {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin,
-        cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len, "fmha_v2_fp16_64_64_sm90_kernel_nl", 20480, 128, 16, false},
+        cubin_fmha_v2_fp16_128_64_sm90_cu_cubin_len, "fmha_v2_fp16_128_64_ldgsts_sm90_kernel_nl", 50176, 128, 64,
+        false},
+    {DATA_TYPE_FP16, 96, 64, kSM_90, cubin_fmha_v2_fp16_96_64_sm90_cu_cubin, cubin_fmha_v2_fp16_96_64_sm90_cu_cubin_len,
+        "fmha_v2_fp16_96_64_sm90_kernel", 49152, 128, 0, false},
+    {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len,
+        "fmha_v2_fp16_64_64_sm90_kernel", 32768, 128, 0, false},
+    {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len,
+        "fmha_v2_fp16_64_64_sm90_kernel_nl", 20480, 128, 16, false},
 #endif // defined(ENABLE_SM90)
 };
 
@@ -869,10 +926,36 @@ public:
 
         const auto findIter = mFunctions.find(hashID(params.s, params.d, params.interleaved, forceUnroll));
         // Provide debug information if the kernel is missing in the pool.
-        std::stringstream configss;
-        configss << "s: " << params.s << " d: " << params.d << " interleaved?: "
-                 << params.interleaved << " forceUnroll?: " << forceUnroll;
-        PLUGIN_ASSERT(findIter != mFunctions.end() && configss.str().c_str());
+        std::stringstream errMsg;
+        errMsg << "Could not find kernel for:\n"
+               << "\t s: " << params.s << "\n"
+               << "\t d: " << params.d << "\n"
+               << "\t interleaved: " << params.interleaved << "\n"
+               << "\t forceUnroll: " << forceUnroll << "\n"
+               << "Was the plugin compiled on a compatible CUDA and SM version?\n"
+               << "\t Compiled on CUDA " << CUDA_VERSION << "\n"
+               << "\t Current SM version: " << mSM << "\n"
+               << "\t SM versions enabled during compilation: "
+#if defined(ENABLE_SM72)
+               << "72 "
+#endif
+#if defined(ENABLE_SM75)
+               << "75 "
+#endif
+#if defined(ENABLE_SM80)
+               << "80 "
+#endif
+#if defined(ENABLE_SM86)
+               << "86 "
+#endif
+#if defined(ENABLE_SM87)
+               << "87 "
+#endif
+#if defined(ENABLE_SM90)
+               << "90 "
+#endif
+               << "\n";
+        PLUGIN_VALIDATE(findIter != mFunctions.end(), errMsg.str().c_str());
 
         const auto& kernelMeta = mKernelMeta[findIter->second.mMetaInfoIndex];
         const CUfunction func = findIter->second.mDeviceFunction;
@@ -904,4 +987,6 @@ inline const FusedMultiHeadAttentionXMMAKernelV2* getXMMAKernelsV2(Data_type typ
 }
 
 } // namespace bert
+} // namespace plugin
+} // namespace nvinfer1
 #endif // _BERT_FMHAV2_FMHAV2

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,8 +47,7 @@ int find_log_2(int x, bool round_up = false)
     return a;
 }
 
-void findDivisor(int denom,
-                  unsigned int& mul_coeff, unsigned int& shift_coeff)
+void findDivisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff)
 {
     if (denom == 0)
     {
@@ -77,7 +76,7 @@ void findDivisor(int denom,
     // and we save shift_coeff as whatever further shift we have to do beyond
     // what the umulhi() implies.
     uint32_t p = 31 + find_log_2(denom, true);
-    uint32_t m = ((1ull << p) + (uint32_t) denom - 1) / (uint32_t) denom;
+    uint32_t m = ((1ULL << p) + (uint32_t) denom - 1) / (uint32_t) denom;
     mul_coeff = m;
     shift_coeff = p - 32;
 }

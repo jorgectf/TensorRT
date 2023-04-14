@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,6 +97,7 @@ int CoordConvACPlugin::enqueue(
     case DataType::kINT32:
     case DataType::kBOOL:
         break;
+    case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
     }
     return 1;
 }

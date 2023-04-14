@@ -20,6 +20,8 @@ Contains logic that captures GPT2 HuggingFace models into ONNX models and TRT en
 """
 
 from itertools import tee
+import os
+from collections import OrderedDict
 
 # tensorrt
 import tensorrt as trt
@@ -33,13 +35,19 @@ from torch.nn import Module
 
 # # huggingface
 from transformers.generation_utils import GenerationMixin
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers import GPT2Tokenizer
 
 # TRT-HuggingFace
 from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig
-from NNDF.networks import NetworkMetadata
-from NNDF.models import TRTEngineFile, TorchModelFile, ONNXModelFile, ModelFileConverter
+from NNDF.networks import NetworkMetadata, Dims
+from NNDF.logger import G_LOGGER
+from NNDF.models import (
+    TRTEngineFile,
+    TorchModelFile,
+    ONNXModelFile,
+    ModelFileConverter,
+)
 
 class GPT2TorchFile(TorchModelFile):
     class TorchModule(Module, GenerationMixin):
@@ -52,18 +60,41 @@ class GPT2TorchFile(TorchModelFile):
             self.transformer = transformer
             self.lm_head = lm_head
             self.config = config
+            self.device = "cuda" # WAR to avoid beam search in framework
+            self.main_input_name = "input_ids" # For better HuggingFace version compatibility
 
-        def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        def prepare_inputs_for_generation(self, input_ids, past = None, use_cache=None, **kwargs):
             # Todo (@pchadha): add position_ids, token_type_ids support
+            # cut decoder_input_ids if past is used
+            if past is not None:
+                input_ids = input_ids[:, -1:]
+
             return {
                 "input_ids": input_ids,
+                "use_cache": use_cache,
+                "past_key_values": past
             }
 
         def forward(self, input_ids, **kwargs):
-            transformer_outputs = self.transformer(input_ids)
+            transformer_outputs = self.transformer(input_ids, **kwargs)
             hidden_states = transformer_outputs[0]
             lm_logits = self.lm_head(hidden_states)
-            return CausalLMOutputWithCrossAttentions(logits=lm_logits)
+
+            return CausalLMOutputWithPast(
+                logits=lm_logits, 
+                past_key_values=transformer_outputs.past_key_values
+            )
+
+        def _reorder_cache(self, past, beam_idx):
+            """
+            This function is used to re-order the :obj:`past_key_values` cache if
+            :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
+            called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+            """
+            return tuple(
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+                for layer_past in past
+            )
 
         def __call__(self, *args, **kwargs):
             return self.forward(*args, **kwargs)
@@ -132,6 +163,8 @@ class GPT2Converter(ModelFileConverter):
         Returns:
             GPT2ONNXFile: ONNX GPT2 decoder object.
         """
+        # Currently does not support exporting GPU models to onnx.
+        device = model.device
         tokenizer = GPT2Tokenizer.from_pretrained(network_metadata.variant)
         input_ids = torch.tensor(
             [
@@ -139,11 +172,12 @@ class GPT2Converter(ModelFileConverter):
                     "Here is some text to encode Hello World", add_special_tokens=True
                 )
             ]
-        )
+        ).to(device)
 
         gpt2_model = GPT2TorchFile.TorchModule(
             model.transformer, model.lm_head, model.config
         )
+
         inputs = GPT2ModelTRTConfig.get_input_dims(network_metadata)[
             GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME
         ]
@@ -158,18 +192,56 @@ class GPT2Converter(ModelFileConverter):
         version_minor = int((torch.__version__).split('.')[1])
         if version_major < 1 or (version_major == 1 and version_minor < 11):
             opt_args['use_external_data_format'] = True
-        torch.onnx._export(
-            gpt2_model,
-            input_ids,
-            output_fpath,
-            opset_version=12,
-            input_names=inputs.get_names(),
-            output_names=outputs.get_names(),
-            dynamic_axes={
-                **inputs.get_torch_dynamic_axis_encoding(),
-                **outputs.get_torch_dynamic_axis_encoding(),
-            },
-            training=torch.onnx.TrainingMode.EVAL,
-            **opt_args
-        )
+        if not network_metadata.other.kv_cache:
+            # This code allows for huggingface compatible torch class to use onnx exporter
+            # This code regulates the number of output = 1 if non kv-cache mode is used.
+            # Otherwise it will automatically output key value pairs
+            old_forward = gpt2_model.forward
+            def _export_forward(input_ids, **kwargs):
+                result = old_forward(input_ids, use_cache = False, **kwargs)
+                return result[0]
+            gpt2_model.forward = _export_forward
+
+            torch.onnx.export(
+                gpt2_model,
+                input_ids,
+                output_fpath,
+                opset_version=13,
+                do_constant_folding=True,
+                input_names=inputs.get_names(),
+                output_names=outputs.get_names(),
+                dynamic_axes={
+                    **inputs.get_torch_dynamic_axis_encoding(),
+                    **outputs.get_torch_dynamic_axis_encoding(),
+                },
+                training=torch.onnx.TrainingMode.EVAL,
+                **opt_args
+            )
+        else:
+            decoder_output = gpt2_model(input_ids, use_cache = True)
+            past_key_values = decoder_output[1]
+
+            # Exporting the kv cache engine
+            old_forward = gpt2_model.forward
+            def _export_forward(input_ids, past_key_values, **kwargs):
+                result = old_forward(input_ids, past_key_values=past_key_values, use_cache=True, **kwargs)
+                return (result[0], result[1])
+            gpt2_model.forward = _export_forward
+
+            torch.onnx.export(
+                gpt2_model,
+                (input_ids, past_key_values),
+                output_fpath,
+                opset_version=13,
+                do_constant_folding=True,
+                input_names=inputs.get_names(),
+                output_names=outputs.get_names(),
+                dynamic_axes={
+                    **inputs.get_torch_dynamic_axis_encoding(),
+                    **outputs.get_torch_dynamic_axis_encoding(),
+                },
+                training=torch.onnx.TrainingMode.EVAL,
+                **opt_args
+            )
+
         return GPT2ONNXFile(output_fpath, network_metadata)

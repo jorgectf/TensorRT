@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +16,14 @@
  */
 #include "common/bboxUtils.h"
 #include "common/cub_helper.h"
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include "cub/cub.cuh"
 #include <array>
+namespace nvinfer1
+{
+namespace plugin
+{
 
-using namespace nvinfer1;
 template <typename T_SCORE>
 pluginStatus_t sortScoresPerImage_gpu(cudaStream_t stream, const int num_images, const int num_items_per_image,
     void* unsorted_scores, void* unsorted_bbox_indices, void* sorted_scores, void* sorted_bbox_indices, void* workspace,
@@ -144,3 +147,5 @@ size_t sortScoresPerImageWorkspaceSize(
 
     return calculateTotalWorkspaceSize(wss, 2);
 }
+} // namespace plugin
+} // namespace nvinfer1

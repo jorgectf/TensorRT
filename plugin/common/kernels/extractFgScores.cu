@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
-using namespace nvinfer1;
+#include "common/kernels/kernel.h"
+namespace nvinfer1
+{
+namespace plugin
+{
 template <typename T>
 pluginStatus_t extractFgScores_gpu(cudaStream_t stream, int N, int A, int H, int W, const void* scores, void* fgScores)
 {
@@ -74,3 +77,5 @@ pluginStatus_t extractFgScores(cudaStream_t stream,
 
     return extractFgScores_gpu<float>(stream, N, A, H, W, scores, fgScores);
 }
+} // namespace plugin
+} // namespace nvinfer1

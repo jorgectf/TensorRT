@@ -30,7 +30,7 @@ if __name__ == "__main__":
     sys.path.append(project_root)
 
 # huggingface
-from transformers import BartTokenizer, BartConfig, PretrainedConfig
+from transformers import BartTokenizer, BartConfig, PretrainedConfig, MBart50Tokenizer
 from transformers.generation_utils import GenerationMixin
 from transformers.modeling_outputs import Seq2SeqLMOutput
 
@@ -125,8 +125,12 @@ class BARTONNXRT(OnnxRTCommand):
         benchmarking_mode: bool = False,
         benchmarking_args: BARTBenchmarkingArgs = None,
     ) -> NetworkResult:
+        
+        if "mbart" not in metadata.variant:
+            tokenizer = BartTokenizer.from_pretrained(metadata.variant)
+        else:
+            tokenizer = MBart50Tokenizer.from_pretrained(metadata.variant, src_lang="en_XX")
 
-        tokenizer = BartTokenizer.from_pretrained(metadata.variant)
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
             output_seq_len = BARTModelTRTConfig.MAX_OUTPUT_LENGTH[metadata.variant]
@@ -140,9 +144,16 @@ class BARTONNXRT(OnnxRTCommand):
         encoder_last_hidden_state, encoder_e2e_time = encoder_inference(
             self.BART_ort_encoder, input_ids, timing_profile
         )
+        
+        # Need to feed the decoder a new empty input_ids for text generation.
+        decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
+        decoder_input_ids = torch.full(
+            (batch_size, decoder_output_len), tokenizer.convert_tokens_to_ids(tokenizer.pad_token), dtype=torch.int32
+        )
+
         _, decoder_e2e_time = decoder_inference(
             self.BART_ort_decoder,
-            input_ids,
+            decoder_input_ids,
             encoder_last_hidden_state,
             timing_profile,
             use_cuda=False,
@@ -156,10 +167,10 @@ class BARTONNXRT(OnnxRTCommand):
                 tokenizer,
                 timing_profile,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
                 use_cuda=False,
+                use_cache=metadata.other.kv_cache,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
             )
         else:
             decoder_output, full_e2e_runtime = full_inference_beam(
@@ -170,10 +181,10 @@ class BARTONNXRT(OnnxRTCommand):
                 timing_profile,
                 num_beams=num_beams,
                 max_length=output_seq_len,
-                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant],
+                min_length=BARTModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else outout_seq_len,
                 use_cuda=False,
+                use_cache=metadata.other.kv_cache,
                 batch_size=batch_size,
-                early_stopping=(not benchmarking_mode),
             )
 
         # Prepare runtime results.
@@ -211,7 +222,7 @@ class BARTONNXRT(OnnxRTCommand):
 
         return NetworkResult(
             input=inference_input,
-            output_tensor=encoder_last_hidden_state,
+            output_tensor=decoder_output,
             semantic_output=semantic_outputs,
             median_runtime=runtime,
             models=models,
@@ -236,6 +247,8 @@ class BARTONNXRT(OnnxRTCommand):
 
         results = []
         try:
+            if metadata.other.kv_cache:
+                assert False, "OnnxRT currently does not support kv cache."
             # no fpath provided for onnx files, download them
             if len(onnx_fpaths) == 0:
                 onnx_fpaths = self.frameworks_cmd.generate_and_download_framework(

@@ -23,9 +23,10 @@ from typing import List, Union
 
 # huggingface
 from transformers import (
-    GPT2LMHeadModel,
+    AutoConfig,
+    AutoModelForCausalLM,
+    # GPT-J uses GPT2 tokenizer
     GPT2Tokenizer,
-    GPT2Config,
 )
 
 # torch
@@ -52,7 +53,7 @@ from NNDF.networks import (
 )
 from GPT2.export import GPT2TorchFile
 from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig, GPT2BenchmarkingArgs
-from GPT2.measurements import gpt2_inference, full_inference_greedy
+from GPT2.measurements import gpt2_inference, full_inference, calculate_perplexity
 
 
 class GPT2HuggingFace(FrameworkCommand):
@@ -69,37 +70,25 @@ class GPT2HuggingFace(FrameworkCommand):
         self, metadata: NetworkMetadata, workspace: NNFolderWorkspace
     ) -> NetworkModels:
 
-        cache_variant = False
-        if metadata.other.kv_cache:
-            cache_variant = True
-
         trt_gpt2_config = self.config
         metadata_serialized = trt_gpt2_config.get_metadata_string(metadata)
-        workspace_dir = workspace.get_path()
-
-        pytorch_model_dir = os.path.join(workspace_dir, metadata_serialized)
+        workspace_dir, _ , onnx_root = workspace.set_model_path(metadata_serialized, is_encoder_decoder = False)
+        pytorch_model_dir = os.path.join(workspace_dir, "pytorch_model")
         # We keep track of the generated torch location for cleanup later
         self.torch_gpt2_dir = pytorch_model_dir
 
-        model = None
-        tfm_config = GPT2Config(use_cache=cache_variant)
-
         if not os.path.exists(pytorch_model_dir):
             # Generate the pre-trained weights
-            model = GPT2LMHeadModel(tfm_config).from_pretrained(metadata.variant)
+            model = AutoModelForCausalLM.from_pretrained(metadata.variant, use_cache = metadata.other.kv_cache)
             model.save_pretrained(pytorch_model_dir)
             print("Pytorch Model saved to {}".format(pytorch_model_dir))
         else:
             print(
                 "Frameworks file already exists, skipping generation and loading from file instead."
             )
-            model = GPT2LMHeadModel(tfm_config).from_pretrained(pytorch_model_dir)
+            model = AutoModelForCausalLM.from_pretrained(pytorch_model_dir)
 
-        root_onnx_model_name = "{}.onnx".format(metadata_serialized)
-        root_onnx_model_fpath = os.path.join(
-            os.getcwd(), workspace_dir, root_onnx_model_name
-        )
-        onnx_model_fpath = root_onnx_model_fpath
+        onnx_model_fpath = os.path.join(onnx_root, metadata_serialized + ".onnx")
 
         gpt2 = GPT2TorchFile(model, metadata)
         self.onnx_gpt2 = gpt2.as_onnx_model(onnx_model_fpath, force_overwrite=False)
@@ -135,15 +124,6 @@ class GPT2HuggingFace(FrameworkCommand):
         if not save_onnx_model and self.onnx_gpt2 is not None:
             self.onnx_gpt2.cleanup()
 
-            # Remove any onnx external files by removing integer named values and weight files
-            workspace_path = workspace.get_path()
-            for d in os.listdir(workspace_path):
-                fpath = os.path.join(workspace_path, d)
-                if os.path.isfile(fpath) and os.path.splitext(d)[1] == ".weight":
-                    os.remove(fpath)
-                elif d.isnumeric():
-                    os.remove(fpath)
-
         if not keep_pytorch_model:
             # Using rmtree can be dangerous, have user confirm before deleting.
             confirm_folder_delete(
@@ -154,6 +134,31 @@ class GPT2HuggingFace(FrameworkCommand):
         if not keep_pytorch_model and not save_onnx_model:
             workspace.cleanup(force_remove=False)
 
+    def setup_tokenizer_and_model(
+        self,
+        metadata: NetworkMetadata,
+        network_fpaths: NetworkModels,
+    ):
+        tokenizer = GPT2Tokenizer.from_pretrained(metadata.variant)
+
+        # GPT2 has no proper token set. Use custom token. Only "generate()" will auto
+        # replace with EOS token when using generating mode
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
+        # By default, HuggingFace model structure is one giant file.
+        gpt2_torch_fpath = network_fpaths.torch[0].fpath
+        gpt2_model = AutoModelForCausalLM.from_pretrained(gpt2_torch_fpath)
+        # Framework fp16 does not support cpu mode for GPT2
+        # TODO: Enable true fp16. Using cuda 11.4 with PyTorch 1.13 will cause issue for this function.
+        # if metadata.precision.fp16:
+        #     gpt2_model = gpt2_model.cuda().half()
+
+        gpt2_torch = GPT2TorchFile.TorchModule(
+            gpt2_model.transformer, gpt2_model.lm_head, gpt2_model.config
+        )
+
+        return tokenizer, gpt2_torch
+
     def execute_inference(
         self,
         metadata: NetworkMetadata,
@@ -162,49 +167,43 @@ class GPT2HuggingFace(FrameworkCommand):
         timing_profile: TimingProfile,
         use_cpu: bool,
         batch_size: int = 1,
+        num_beams: int = 1,
         benchmarking_mode: bool = False,
         benchmarking_args: GPT2BenchmarkingArgs = None,
     ) -> Union[NetworkResult, BenchmarkingResult]:
 
-        # Execute some tests
-        tokenizer = GPT2Tokenizer.from_pretrained(metadata.variant)
-
-        # GPT2 has no proper token set. Use custom token. Only "generate()" will auto
-        # replace with EOS token when using generating mode
-        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-
+        tokenizer, gpt2_torch = self.setup_tokenizer_and_model(metadata, network_fpaths)
+        config = gpt2_torch.config
         # Prepare the input tokens and find out output sequence length.
         if not benchmarking_mode:
-            output_seq_len = GPT2ModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant]
+            output_seq_len = GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
             input_ids = tokenizer([inference_input] * batch_size, padding=True, return_tensors="pt").input_ids
         else:
             input_seq_len = benchmarking_args.input_seq_len
             output_seq_len = benchmarking_args.output_seq_len
-            input_ids = torch.randint(0, GPT2ModelTRTConfig.VOCAB_SIZE, (batch_size, input_seq_len))
-
-        # By default, HuggingFace model structure is one giant file.
-        gpt2_torch_fpath = network_fpaths.torch[0].fpath
-        config = GPT2Config(use_cache=metadata.other.kv_cache)
-        gpt2_model = GPT2LMHeadModel(config).from_pretrained(gpt2_torch_fpath)
-        gpt2_torch = GPT2TorchFile.TorchModule(
-            gpt2_model.transformer, gpt2_model.lm_head, gpt2_model.config
-        )
-        greedy_output = gpt2_torch.generate(input_ids) #greedy search
+            input_ids = torch.randint(0, config.vocab_size, (batch_size, input_seq_len))
 
         # get single decoder iteration inference timing profile
         _, decoder_e2e_time = gpt2_inference(
-            gpt2_torch, input_ids, timing_profile, use_cuda=(not use_cpu)
-        )
-
-        # get complete decoder inference result and its timing profile
-        sample_output, full_e2e_runtime = full_inference_greedy(
             gpt2_torch,
             input_ids,
             timing_profile,
+            use_cuda=(not use_cpu),
+            use_cache = metadata.other.kv_cache,
+        )
+
+        # get complete decoder inference result and its timing profile
+        sample_output, full_e2e_runtime = full_inference(
+            gpt2_torch,
+            input_ids,
+            tokenizer,
+            timing_profile,
             max_length=output_seq_len,
+            min_length=GPT2ModelTRTConfig.MIN_OUTPUT_LENGTH[metadata.variant] if not benchmarking_mode else output_seq_len,
             use_cuda=(not use_cpu),
             batch_size=batch_size,
-            early_stopping=(not benchmarking_mode),
+            use_cache=metadata.other.kv_cache,
+            num_beams=num_beams
         )
 
         # Prepare runtime results.
@@ -233,11 +232,26 @@ class GPT2HuggingFace(FrameworkCommand):
 
         return NetworkResult(
             input=inference_input,
-            output_tensor=greedy_output,
+            output_tensor=sample_output,
             semantic_output=semantic_outputs,
             median_runtime=runtime,
             models=network_fpaths,
         )
+
+    def execute_calculate_perplexity(
+        self,
+        metadata: NetworkMetadata,
+        network_fpaths: NetworkModels,
+        reference: str,
+    ):
+        tokenizer, gpt2_torch = self.setup_tokenizer_and_model(metadata, network_fpaths)
+        reference = reference.replace("\\n", "\n")
+        ppl_input_ids = tokenizer([reference], padding=True, return_tensors="pt").input_ids
+        perplexity = calculate_perplexity(
+            gpt2_torch, ppl_input_ids, GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
+        )
+
+        return perplexity
 
     def run_framework(
         self,
@@ -251,12 +265,14 @@ class GPT2HuggingFace(FrameworkCommand):
         batch_size: int = 1,
         args: object = None,
         benchmarking_mode: bool = False,
+        perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
 
         """
         Main entry point of our function which compiles and generates our model data.
         """
-        results = []
+        inference_results = []
+        ppl_results = []
         workspace = NNFolderWorkspace(
             self.config.network_name, metadata, working_directory
         )
@@ -264,25 +280,32 @@ class GPT2HuggingFace(FrameworkCommand):
             network_fpaths = self.generate_and_download_framework(metadata, workspace)
             if not benchmarking_mode:
                 for ninput in network_input:
-                    results.append(
+                    inference_results.append(
                         self.execute_inference(
-                            metadata, network_fpaths, ninput, timing_profile, use_cpu, batch_size
+                            metadata, network_fpaths, ninput, timing_profile, use_cpu, batch_size, args.num_beams
                         )
                     )
+                if perplexity_reference is not None:
+                    for r in perplexity_reference:
+                        ppl_results.append(
+                            self.execute_calculate_perplexity(
+                                metadata, network_fpaths, r
+                            )
+                        )
             else:
                 benchmarking_args = GPT2BenchmarkingArgs(args.input_seq_len, args.output_seq_len)
-                results = self.execute_inference(
-                    metadata, network_fpaths, None, timing_profile, use_cpu, batch_size, True, benchmarking_args
+                inference_results = self.execute_inference(
+                    metadata, network_fpaths, None, timing_profile, use_cpu, batch_size, args.num_beams, True, benchmarking_args
                 )
         finally:
             self.cleanup(workspace, keep_onnx_model, keep_pytorch_model)
 
-        return results
+        return inference_results, ppl_results
 
     def args_to_network_metadata(self, args: argparse.Namespace) -> NetworkMetadata:
         return NetworkMetadata(
             variant=args.variant,
-            precision=Precision(fp16=False),
+            precision=Precision(fp16=args.fp16),
             other=self.config.MetadataClass(kv_cache=args.enable_kv_cache),
         )
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "common/kernel.h"
+#include "common/kernels/kernel.h"
 #include <cstdio>
-
+namespace nvinfer1
+{
+namespace plugin
+{
 pluginStatus_t generateAnchors_cpu(
     int numRatios, float* ratios, int numScales, float* scales, int baseSize, float* anchors)
 {
@@ -95,3 +98,5 @@ pluginStatus_t generateAnchors(cudaStream_t stream,
     CSC(cudaFreeHost(anchors_cpu), STATUS_FAILURE);
     return status;
 }
+} // namespace plugin
+} // namespace nvinfer1
