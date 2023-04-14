@@ -27,12 +27,12 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     container:
-      image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
+      image: nvidia/cuda:12.0.1-cudnn8-devel-ubuntu20.04
       env:
         DEBIAN_FRONTEND: noninteractive
-        CUDA_VERSION: 11.8.0
+        CUDA_VERSION: 12.0.1
         OS_VERSION: 20.04
-        TRT_VERSION: 8.5.1.7
+        TRT_VERSION: 8.6.0.12
         TRT_OSSPATH: /__w/TensorRT/TensorRT
         TRT_LIBPATH: /usr/lib/x86_64-linux-gnu
 
@@ -41,7 +41,7 @@ jobs:
       run: apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub
 
     - name: Install required libraries
-      run: |-
+      run: |
         apt-get update && apt-get install -y software-properties-common
         add-apt-repository ppa:ubuntu-toolchain-r/test
         apt-get update && apt-get install -y --no-install-recommends libcurl4-openssl-dev wget git pkg-config sudo ssh libssl-dev pbzip2 pv bzip2 unzip devscripts lintian fakeroot dh-make build-essential
@@ -52,12 +52,12 @@ jobs:
         submodules: 'recursive'
 
     - name: Install python3
-      run: |-
+      run: |
         apt-get install -y --no-install-recommends python3 python3-pip python3-dev python3-wheel
 
     - name: Link python3
       working-directory: /usr/local/bin
-      run: |-
+      run: |
         ln -s /usr/bin/python3 python
         ln -s /usr/bin/pip3 pip
 
@@ -71,7 +71,7 @@ jobs:
                 libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
                 python3-libnvinfer=${v}; \
         else \
-            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION%.*}" &&\
+            v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
             apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
             apt-get update &&\
             sudo apt-get install -y libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
@@ -80,7 +80,7 @@ jobs:
         fi
 
     - name: Install PyPI packages
-      run: |-
+      run: |
         pip3 install --upgrade pip
         pip3 install setuptools>=41.0.0
         pip3 install -r requirements.txt
@@ -90,7 +90,7 @@ jobs:
 
     - name: Install Cmake
       working-directory: /tmp
-      run: |-
+      run: |
         wget -q https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh
         chmod +x cmake-3.14.4-Linux-x86_64.sh
         ./cmake-3.14.4-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license
@@ -98,7 +98,7 @@ jobs:
 
     - name: Download NGC client
       working-directory: /usr/local/bin
-      run: |-
+      run: |
         wget -q https://ngc.nvidia.com/downloads/ngccli_cat_linux.zip
         unzip ngccli_cat_linux.zip
         chmod u+x ngc-cli/ngc
