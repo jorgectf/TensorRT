@@ -6,8 +6,9 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ 'main' ]
-  schedule:
-    - cron: '7 2 * * 3'
+  #schedule:
+  #  - cron: '7 2 * * 3'
+  workflow_dispatch:
 
 jobs:
   analyze:
